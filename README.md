@@ -2,11 +2,10 @@
 
 ## Dependencies
 
-Python 3.9.
+Install dependencies via:
 
-Python dependencies will be installed via pip with the command below.
-
-Please see `environment.yml` for complete install details.
+   conda env create -f environment.yml
+   conda activate hdag
 
 
 ## Install
