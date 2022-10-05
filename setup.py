@@ -12,6 +12,7 @@ setup(
     entry_points={"console_scripts": ["hdb=hdb.cli:safe_cli"]},
     install_requires=[
         "PyQt5",
+        "amas",
         "biopython",
         "click",
         "ete3",
