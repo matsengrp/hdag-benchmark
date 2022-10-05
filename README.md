@@ -4,8 +4,8 @@
 
 Install dependencies via:
 
-   conda env create -f environment.yml
-   conda activate hdag
+    conda env create -f environment.yml
+    conda activate hdag
 
 
 ## Install
