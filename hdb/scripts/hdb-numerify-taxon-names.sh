@@ -4,15 +4,15 @@
 
 set -eu
 
-test $# -ne 1 && {
+test $# -ne 2 && {
     echo "Usage: hdb-numerify-taxon-names.sh tree.nwk"
     exit 1
 }
 
 orig_path=$1
-base=$(basename $orig_path .nwk)
-mapping_path=${base}.mapping
-numerified=${base}.n.nwk
+out_path_base=$2
+mapping_path=${out_path_base}.mapping
+numerified=${out_path_base}.n.nwk
 
 echo "ancestral ancestral" > $mapping_path
 nw_labels $orig_path | grep -v ancestral | awk '{print $0 " s" NR}' >> $mapping_path
