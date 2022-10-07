@@ -4,6 +4,7 @@ import sys
 import click
 import hdb.summary as summary
 import hdb.collapse_tree as ct
+import ete3
 
 
 # Entry point
@@ -40,7 +41,7 @@ def alnsummarize(fasta_paths, output_path):
 @click.argument("output_newick")
 def collapse_tree(input_newick, input_fasta, output_newick):
     with open(input_newick, 'r') as fh:
-        intree = ete3.Tree(fh.read())
+        intree = ct.load_phastsim_newick(fh.read())
     outtree = ct.collapse_tree(intree, load_fasta(input_fasta))
     outtree.write(features=["mutations"], format_root_node=True, outfile=output_newick)
 

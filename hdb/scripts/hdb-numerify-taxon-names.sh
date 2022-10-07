@@ -5,7 +5,7 @@
 set -eu
 
 test $# -ne 2 && {
-    echo "Usage: hdb-numerify-taxon-names.sh tree.nwk"
+    echo "Usage: hdb-numerify-taxon-names.sh tree.nwk output_base_string"
     exit 1
 }
 
