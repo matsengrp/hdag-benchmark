@@ -26,7 +26,7 @@ for clade in $(cat clades.txt); do
     cladedir=$ignoredir/$clade/
     mkdir -p $cladedir
     tree=$cladedir/tree.nwk
-    matUtils extract -c $clade -i $bigtree -t $tree
+    # matUtils extract -c $clade -i $bigtree -t $tree
 
     # creates numerified tree newick with name $ntree
     ntreebase=$cladedir/tree
@@ -46,5 +46,19 @@ for clade in $(cat clades.txt); do
     simfasta=$cladedir/sars-cov-2_simulation_output.fasta
 
     ctree=$cladedir/collapsed_simulated_tree.nwk
+    ctreefasta=${ctree}.fasta
+    ctreefasta_with_refseq=$cladedir/ctree_with_refseq.fasta
+
+    # produces ctreefasta_with_refseq which contains reference sequence
     hdb collapse-tree $simtree $simfasta $ctree
+    cp refseq.fasta $ctreefasta_with_refseq
+    cat $ctreefasta >> $ctreefasta_with_refseq
+
+
+
+    ##### Start inference: build dag with dnapars
+    dagdir=$cladedir/historydag
+    echo $dagdir
+    rm -rf $dagdir
+    find-dnapars-trees.sh -f $ctreefasta_with_refseq -n 1 -o $dagdir -r ancestral
 done

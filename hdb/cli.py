@@ -4,6 +4,7 @@ import sys
 import click
 import hdb.summary as summary
 import hdb.collapse_tree as ct
+import hdb.aggregate_dnapars_trees as agg
 import ete3
 
 
@@ -28,6 +29,30 @@ def cli():
 
 
 @cli.command()
+@click.argument("outfiles", nargs=-1)
+@click.option("-r", "--root", help="name for outgroup sequence")
+@click.option("-a", "--abundance_file", help="filepath to abundance mapping")
+@click.option("-o", "--output_path", help="filepath to write pickled hDAG")
+def aggregate_dnapars_trees(outfiles, root, abundance_file, output_path):
+    """Process dnapars outfiles into a history DAG."""
+    dag = agg.aggregate_dnapars_trees(outfiles, root, abundance_file)
+    with open(output_path, 'wb') as fh:
+        pickle.dump(dag, file=fh)
+
+@cli.command()
+@click.argument("indags", nargs=-1)
+@click.option("-o", "--output_path", help="filepath to write pickled hDAG")
+def merge_dags(indags):
+    def load_dag(indag):
+        with open(indag, 'rb') as fh:
+            dag = pickle.load(fh)
+        return dag
+    
+    dag = agg.aggregate_dags(load_dag(indag) for indag in indags)
+    with open(output_path, 'wb') as fh:
+        pickle.dump(dag, file=fh)
+
+@cli.command()
 @click.argument("fasta_paths", nargs=-1)
 @click.option("-o", "--output-path", default="summary.csv", help="CSV output path.")
 def alnsummarize(fasta_paths, output_path):
@@ -42,8 +67,14 @@ def alnsummarize(fasta_paths, output_path):
 def collapse_tree(input_newick, input_fasta, output_newick):
     with open(input_newick, 'r') as fh:
         intree = ct.load_phastsim_newick(fh.read())
-    outtree = ct.collapse_tree(intree, load_fasta(input_fasta))
+    infasta = load_fasta(input_fasta)
+    outtree = ct.collapse_tree(intree, infasta)
     outtree.write(features=["mutations"], format_root_node=True, outfile=output_newick)
+    with open(output_newick + '.fasta', 'w') as fh:
+        for seqname in sorted(n.name for n in outtree.get_leaves()):
+            print('>' + seqname, file=fh)
+            print(infasta[seqname], file=fh)
+
 
 def load_fasta(fastapath):
     fasta_records = []
