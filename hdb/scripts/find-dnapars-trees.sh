@@ -68,11 +68,9 @@ for ((seed=1;seed<=NUM_SEEDS;seed++)); do
     RUNDIR=$TMPDIR/run_$seed
     mkdir $RUNDIR
     MSEED=$(expr \( $seed - 1 \) \* 4 + 1)
-    echo $pwd
-    echo $RUNDIR
     sed "3s/.*/$MSEED/" $TMPDIR/dnapars.cfg > $RUNDIR/dnapars.cfg
     cd $RUNDIR
-    dnapars < $RUNDIR/dnapars.cfg
+    dnapars < dnapars.cfg
     cd $curr_dir
 done
 
@@ -85,5 +83,5 @@ ls -d $TMPDIR/run_*/ | xargs -n $AGGSPLIT | while read args; do
 done
 
 #change args here:
-hdb aggregate-dags $DAGDIR/*.p $OUTDIR/full_dag.p
+hdb merge-dags $DAGDIR/*.p -o $OUTDIR/full_dag.p
 rm -rf $TMPDIR

@@ -26,7 +26,7 @@ for clade in $(cat clades.txt); do
     cladedir=$ignoredir/$clade/
     mkdir -p $cladedir
     tree=$cladedir/tree.nwk
-    # matUtils extract -c $clade -i $bigtree -t $tree
+    matUtils extract -c $clade -i $bigtree -t $tree
 
     # creates numerified tree newick with name $ntree
     ntreebase=$cladedir/tree

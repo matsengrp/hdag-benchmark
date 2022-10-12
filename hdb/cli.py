@@ -6,6 +6,7 @@ import hdb.summary as summary
 import hdb.collapse_tree as ct
 import hdb.aggregate_dnapars_trees as agg
 import ete3
+import pickle
 
 
 # Entry point
@@ -42,13 +43,13 @@ def aggregate_dnapars_trees(outfiles, root, abundance_file, output_path):
 @cli.command()
 @click.argument("indags", nargs=-1)
 @click.option("-o", "--output_path", help="filepath to write pickled hDAG")
-def merge_dags(indags):
+def merge_dags(indags, output_path):
     def load_dag(indag):
         with open(indag, 'rb') as fh:
             dag = pickle.load(fh)
         return dag
     
-    dag = agg.aggregate_dags(load_dag(indag) for indag in indags)
+    dag = agg.merge_dags(load_dag(indag) for indag in indags)
     with open(output_path, 'wb') as fh:
         pickle.dump(dag, file=fh)
 
@@ -70,10 +71,24 @@ def collapse_tree(input_newick, input_fasta, output_newick):
     infasta = load_fasta(input_fasta)
     outtree = ct.collapse_tree(intree, infasta)
     outtree.write(features=["mutations"], format_root_node=True, outfile=output_newick)
-    with open(output_newick + '.fasta', 'w') as fh:
-        for seqname in sorted(n.name for n in outtree.get_leaves()):
+    variant_sites = set()
+    for node in outtree.traverse():
+        for mut in node.mutations:
+            variant_sites.add(int(mut[1:-1]))
+    variant_sites = list(sorted(variant_sites))
+    with open(output_newick + '.variant_sites.txt', 'w') as fh:
+        fh.write(' '.join(str(num) for num in variant_sites))
+    
+    def excise_variants(seq):
+        return ''.join(seq[idx - 1] for idx in variant_sites)
+
+    with open(output_newick + '.fasta', 'w') as fh, open(output_newick + '.variant_sites.fasta', 'w') as fhvariants:
+        for seqname in sorted((n.name for n in outtree.get_leaves()),
+                              key=lambda name: int(name[1:])):
             print('>' + seqname, file=fh)
+            print('>' + seqname, file=fhvariants)
             print(infasta[seqname], file=fh)
+            print(excise_variants(infasta[seqname]), file=fhvariants)
 
 
 def load_fasta(fastapath):

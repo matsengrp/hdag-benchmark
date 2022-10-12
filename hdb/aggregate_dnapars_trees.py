@@ -17,10 +17,10 @@ def aggregate_dnapars_trees(outfiles, outgroup, abundance_file):
             dag.merge(partial_dag)
     return dag
 
-def aggregate_dags(dags):
+def merge_dags(dags):
     dag = None
     for partial_dag in dags:
-        print("Parsimony score of best tree in ", dagpath, " is ", partial_dag.optimal_weight_annotate())
+        print("Parsimony score of best tree in this dag is ", partial_dag.optimal_weight_annotate())
         if dag is None:
             dag = partial_dag
         else:
