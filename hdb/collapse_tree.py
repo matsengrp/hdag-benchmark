@@ -37,7 +37,7 @@ def collapse_tree(etetree, fasta):
     leaf_seqs = {fasta[node.name] for node in leaves}
     n = len(leaves) - len(leaf_seqs)
     if len(leaves) != len(leaf_seqs):
-        print("WARNING: non-unique leaf sequences in modified tree")
+        raise RuntimeError("Non-unique leaf sequences in modified tree")
     return tree
 
 def load_phastsim_newick(newickstring):

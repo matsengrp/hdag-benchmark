@@ -11,4 +11,5 @@ dependencies:
   - usher
   - gctree
   - phylip
+  - bcftools
   - pip
