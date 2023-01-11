@@ -91,6 +91,16 @@ def collapse_tree(input_newick, input_fasta, output_newick):
             print(excise_variants(infasta[seqname]), file=fhvariants)
 
 
+@cli.command()
+@click.option("-i", "--input-path", help="Newick tree input path.")
+@click.option("-o", "--output-path", help="Output path.")
+def resolve_multifurcations(input_path, output_path):
+    tree = ete3.Tree(input_path, format=1)
+    tree.resolve_polytomy()
+    tree.write(outfile=output_path)
+
+
+
 def load_fasta(fastapath):
     fasta_records = []
     current_seq = ''
