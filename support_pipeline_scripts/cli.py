@@ -69,8 +69,6 @@ def get_true_nodes(tree_path):
             for child in node.children:
                 cu.extend(list(etenode2cu[child.name]))
         
-        print(cu)
-        
         etenode2cu[node.name] = frozenset(cu)
 
     return set([v for k, v in etenode2cu.items()])
@@ -133,9 +131,14 @@ def beast_output(node_sets, pb_file, seq2taxId):
 @click.command("agg")
 @click.option('--input', '-i', help='file path to input list as a pickle.')
 @click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
-def agg(input, out_dir):
+@click.option('--clade_name', '-c', default=None)
+def agg(input, out_dir, clade_name):
     """Given the pickled file, aggregates results for support values"""
-   
+    
+    # Assumes input is path/to/clade_name/historydag/opt.pb
+    if clade_name is None:
+        clade_name = input.split("/")[-3]
+
     with open(input, "rb") as f:
         results = pickle.load(f)
 
@@ -146,23 +149,26 @@ def agg(input, out_dir):
             counter += 1
     print(counter, "nodes under consideration")
 
-    out_path = out_dir + "/fig.png"
-    x, y = sliding_window(results, window_size=200)
+    window_size = int(len(results) * 0.15)
+    out_path = out_dir + f"/fig_w={window_size}.png"
+    x, y = sliding_window_plot(results, window_size=window_size)
     plt.plot(x, y)
     plt.plot([0, 1], [0, 1])
+    plt.xlabel("Estimated Support")
+    plt.ylabel(f"Empirical Probability (window_size={window_size}/{len(results)})")
+    plt.title(f"Clade {clade_name} Coverage Analysis")
     plt.savefig(out_path)
 
 
-def sliding_window(results, window_size=20):
+def sliding_window_plot(results, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
 
     x, y = [], []
     side_len = int(window_size/2)
     for i, (_, est_sup, _) in enumerate(results[side_len+1 : -side_len-1]):
-        idx = side_len+1+i  # index of starting position in list
+        # idx = side_len+1+i  # index of starting position in list
         x.append(est_sup)
-        window = [int(el[2]) for el in results[idx-side_len:idx+side_len]]
-        print(idx, window)
+        window = [int(el[2]) for el in results[max(0, idx-side_len):min(len(results), idx+side_len)]]
         y.append(sum(window) / len(window))
     
     return x, y

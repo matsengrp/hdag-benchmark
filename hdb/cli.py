@@ -7,6 +7,7 @@ import hdb.collapse_tree as ct
 import hdb.aggregate_dnapars_trees as agg
 import ete3
 import pickle
+import random
 
 
 # Entry point
@@ -41,6 +42,36 @@ def aggregate_dnapars_trees(outfiles, root, abundance_file, output_path):
         pickle.dump(dag, file=fh)
 
 @cli.command()
+@click.argument("input_path")
+@click.argument("out_path_base")
+def numerify_taxon_names(input_path, out_path_base):
+    """Convert taxon names to s<number>, outputting a "mapping file" and a renamed newick."""
+    # Equivalent-ish to the original bash script:
+    # orig_path=$1
+    # out_path_base=$2
+    # mapping_path=${out_path_base}.mapping
+    # numerified=${out_path_base}.n.nwk
+    # echo "ancestral ancestral" > $mapping_path
+    # nw_labels $orig_path | grep -v ancestral | awk '{print $0 " s" NR}' >> $mapping_path
+    # nw_rename $orig_path $mapping_path > $numerified
+
+    mapping_path = out_path_base + ".mapping"
+    numerified_path = out_path_base + ".n.nwk"
+
+    tree = ete3.Tree(input_path, format=1)
+    mapping = {}
+    curr_num = 1
+    for node in tree.traverse("postorder"):
+        mapping[node.name] = f"s{curr_num}"
+        node.name = f"s{curr_num}"
+        curr_num += 1
+
+    tree.write(format=1, outfile=numerified_path)
+    with open(mapping_path, "w") as f:
+        for seq_id, tax_id in mapping.items():
+            print(f"{seq_id} {tax_id}", file=f)
+
+@cli.command()
 @click.argument("indags", nargs=-1)
 @click.option("-o", "--output_path", help="filepath to write pickled hDAG")
 def merge_dags(indags, output_path):
@@ -70,6 +101,7 @@ def collapse_tree(input_newick, input_fasta, output_newick):
         intree = ct.load_phastsim_newick(fh.read())
     infasta = load_fasta(input_fasta)
     outtree = ct.collapse_tree(intree, infasta)
+
     outtree.write(features=["mutations"], format_root_node=True, outfile=output_newick)
     variant_sites = set()
     for node in outtree.traverse():
@@ -94,10 +126,50 @@ def collapse_tree(input_newick, input_fasta, output_newick):
 @cli.command()
 @click.option("-i", "--input-path", help="Newick tree input path.")
 @click.option("-o", "--output-path", help="Output path.")
-def resolve_multifurcations(input_path, output_path):
+@click.option("-s", "--resolve-seed", default=1)
+def resolve_multifurcations(input_path, output_path, resolve_seed):
     tree = ete3.Tree(input_path, format=1)
-    tree.resolve_polytomy()
+    resolve_polytomy(tree, resolve_seed)
     tree.write(outfile=output_path)
+
+
+def resolve_polytomy(tree, seed):
+        """
+        Given an ete tree, resolves all polytomies by creating a
+        uniformly random bifurcating tree that is consistent with
+        the multifurcating one.
+        """
+
+        random.seed(seed)
+
+        # TODO: Consider ways of partially resolving this tree...
+        def _resolve(node):
+            new_node_name = 1
+            if len(node.children) > 2:
+                node_list = list(node.children)
+                node.children = []
+                while len(node_list) > 2:
+                    # Randomly sample a pair of nodes
+                    pair = random.sample(range(0, len(node_list)-1), 2)
+                    pair.sort()
+                    
+                    # merge under a parent node
+                    par = ete3.Tree()
+                    par.name = f"r{new_node_name}"
+                    new_node_name += 1
+                    par.add_child(node_list.pop(pair[1]))
+                    par.add_child(node_list.pop(pair[0]))
+
+                    # insert into list for this node to be further merged
+                    node_list.append(par)
+                
+                node.add_child(node_list[0])
+                node.add_child(node_list[1])
+
+        target = [tree]
+        target.extend([n for n in tree.get_descendants()])
+        for n in target:
+            _resolve(n)
 
 
 
