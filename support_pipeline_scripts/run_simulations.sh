@@ -9,7 +9,7 @@
 # Paramaters that determine how many trees to simulate for each clade
 num_res=2
 num_sim=2
-# TODO: makes these parameters to pipeline script
+# TODO: makes these parameters for inference and simulation scripts
 
 echo ""
 echo "=> Simulating trees..."
@@ -38,6 +38,9 @@ echo >> _refseq.fasta
 mv _refseq.fasta refseq.fasta
 
 for clade in $(cat ../clades.txt); do
+    # if value of $var starts with #, ignore it
+    [[ $clade =~ ^#.* ]] && continue
+
     # TODO: Once working, send a cluster job off that does all this stuff?
     echo $clade
     cladedir=$clade

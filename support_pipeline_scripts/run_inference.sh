@@ -26,6 +26,10 @@ larch_usher_exec=/home/whowards/larch/larch/build/larch-usher
 
 datadir=~/hdag-benchmark/data
 for clade in $(cat ../clades.txt); do
+
+    # if value of $var starts with #, ignore it
+    [[ $clade =~ ^#.* ]] && continue
+
     # TODO: send a cluster job off that does all this stuff?
     echo $clade
     cladedir=$datadir/$clade
@@ -58,9 +62,17 @@ for clade in $(cat ../clades.txt); do
         usher-sampled -v $ctreevcf -t $starttree -o $seedtree  --optimization_minutes=0
 
         echo "===> lusher optimizing..."
-        optimized_dag=$dagdir/opt_dag.pb
-        $larch_usher_exec -i $seedtree -r $refseqfile -c 100 -o $optimized_dag
+        logdir=$dagdir/opt_info/optimazation_log
+        optdag_final=$dagdir/final_opt_dag.pb
 
-        python ~/hdag-benchmark/support_pipeline_scripts/cli.py save_supports -m "hdag" -t $ctree -i $optimized_dag -o $dagdir/results.pkl
+        python ~/hdag-benchmark/support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 1800 -o $dagdir -l $logdir
+        python ~/hdag-benchmark/support_pipeline_scripts/cli.py save_supports -m "hdag" -t $ctree -i $optdag_final -o $dagdir/results.pkl
+        echo ""
+        echo ""
     done
 done
+
+# python ~/hdag-benchmark/support_pipeline_scripts/cli.py save_supports -m "hdag" \
+# -t /home/whowards/hdag-benchmark/data/A.2.5/1/simulation/collapsed_simulated_tree.nwk \
+# -i /home/whowards/hdag-benchmark/data/A.2.5/1/results/historydag/opt_dag.pb \
+# -o /home/whowards/hdag-benchmark/data/A.2.5/1/results/historydag/results.pkl

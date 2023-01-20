@@ -130,7 +130,7 @@ def collapse_tree(input_newick, input_fasta, output_newick):
 def resolve_multifurcations(input_path, output_path, resolve_seed):
     tree = ete3.Tree(input_path, format=1)
     resolve_polytomy(tree, resolve_seed)
-    tree.write(outfile=output_path)
+    tree.write(outfile=output_path, format=1)
 
 
 def resolve_polytomy(tree, seed):
