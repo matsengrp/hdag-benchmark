@@ -6,6 +6,8 @@ import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+from sklearn.metrics import precision_recall_curve
+import numpy as np
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -14,6 +16,60 @@ def cli():
     Command line scripts to facilitate node support validation
     """
     pass
+
+
+###################################################################################################
+### Simulation Info ###############################################################################
+###################################################################################################
+
+# TODO: Use this in all simulations scripts
+@click.command("get_pars_score")
+@click.option('--sim_dir', '-s', help='the folder containing TOI and fasta file.')
+def get_pars_score(sim_dir):
+    """
+    Load true tree as an ete3 tree called `tree`, with leaf sequences
+    stored in nodes' attribute `sequence`
+    """
+    from historydag.parsimony import parsimony_score, sankoff_upward
+    tree_path = sim_dir + "/collapsed_simulated_tree.nwk"
+    tree = ete.Tree(tree_path) # Doesn't have internal names
+
+    fasta_path = sim_dir + "/ctree_with_refseq.fasta"   # ancestral seq in second line of this file
+    with open(fasta_path, "r") as f:
+        assert ">ancestral\n" == f.readline()
+        ancestral_seq = f.readline().strip()
+    
+    # build sequences from mutations
+    for node in tree.traverse("preorder"):
+        if node.is_root():
+            seq = ancestral_seq
+        else:
+            seq = node.up.sequence
+            if len(node.mutations) >= 1:
+                for mut in node.mutations.split("|"):
+                    mut = mut.strip()
+                    curr = mut[0]
+                    i = int(mut[1:-1])-1    # convert indices to 0-based
+                    new = mut[-1]
+                    assert seq[i] == curr
+                    seq = seq[:i] + new + seq[i + 1:]
+        
+        node.add_feature("sequence", seq)
+
+    # just counts mutations between simulated internal node sequences
+    tree_score = parsimony_score(tree)
+
+    # computes the best possible parsimony score of any labeling on tree's topology
+    max_score = sankoff_upward(tree, len(tree.sequence))
+
+    outfile = sim_dir + "/toi_info/tree_stats.txt"
+    with open(outfile, "w") as f:
+        f.write(f"TOI parsimony score\t{tree_score}\n")
+        f.write(f"Max parsimony score (topology)\t{max_score}\n",)
+        f.write(f"Max parsimony score (on data)\t...Use dnapars script\n")
+
+
+
 
 ###################################################################################################
 #### Inference ####################################################################################
@@ -33,6 +89,7 @@ def save_supports(method, tree_path, input_path, output_path):
     Output: For each file in the input directory, a text file containing list of support values in the
             format (clade, estimated_support, in_tree)
     """
+
 
     # Map of taxon id (e.g., s1, s4, etc) to full sequence
     fasta_path = tree_path + ".fasta"
@@ -104,6 +161,7 @@ def hdag_output(node_set, pb_file, taxId2seq):
             continue
 
         # Convert cg label to taxon id
+        # TODO: Fix key error labels seq is not among taxID
         id_node = frozenset([seq2taxId[label.compact_genome.to_sequence()] for label in node])
         est_sup = counts[node] / total_trees
         node2stats[id_node] = (est_sup, id_node in node_set)
@@ -155,7 +213,8 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-o", f"{out_dir}/opt_dag_1.pb",
             "-l", f"{log_dir}_1",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(0)
+            "--move-coeff-pscore", str(0),
+            "--sample-best-tree"            # NOTE: Might need to change this with different version of larch-usher
             ]
     if refseqfile is not None:
         args.extend(["-r", refseqfile])
@@ -169,7 +228,8 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-o", f"{out_dir}/opt_dag_2.pb",
             "-l", f"{log_dir}_2",
             "--move-coeff-nodes", str(2),
-            "--move-coeff-pscore", str(1)
+            "--move-coeff-pscore", str(1),
+            "--sample-best-tree"
             ]
     subprocess.run(args=args)
 
@@ -182,7 +242,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-l", f"{log_dir}_3",
             "--move-coeff-nodes", str(1),
             "--move-coeff-pscore", str(3),
-            "--sample-any-tree"
+            # "--sample-any-tree"
             ]
     subprocess.run(args=args)
 
@@ -198,9 +258,13 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-o", f"{out_dir}/final_opt_dag.pb",
             "-l", f"{log_dir}_complete",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(3)
+            "--move-coeff-pscore", str(3),
+            "--sample-best-tree"
             ]
     subprocess.run(args=args)
+
+
+    # TODO: Add --sample-any again?
 
 
 
@@ -214,6 +278,7 @@ def beast_output(node_sets, pb_file, seq2taxId):
 #### Aggregation ##################################################################################
 ###################################################################################################
 
+# TODO: Rename this
 @click.command("agg")
 @click.option('--input', '-i', help='file path to input list as a pickle.')
 @click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
@@ -224,7 +289,7 @@ def agg(input, out_dir, clade_name):
     with open(input, "rb") as f:
         results = pickle.load(f)
 
-    window_size = int(len(results) * 0.10)
+    window_size = int(len(results) * 0.20)
     out_path = out_dir + f"/fig_w={window_size}.png"
     x, y = sliding_window_plot(results, window_size=window_size)
 
@@ -240,6 +305,72 @@ def agg(input, out_dir, clade_name):
     ax2.set_xlabel("Estimated Support")
     # ax2.set_yscale("log")
     f.savefig(out_path)
+    f.clf()
+
+    # TODO: Plot PR curves in different method
+    leaf_idxs = []
+    for i, (clade, _, _) in enumerate(results):
+        if len(clade) <= 1:
+            leaf_idxs.append(i)
+    
+
+    f.set_size_inches(6.4, 4.8)
+    y_true = [y for i, (_, _, y) in enumerate(results)]
+    y_scores = [sup for i, (_, sup, _) in enumerate(results)]
+    ratio = sum(y_true) / len(y_true)
+
+    precision, recall, thresholds = precision_recall_curve(y_true, y_scores)
+    # print(precision)
+    # print(recall)
+    # print(thresholds)
+    plt.ylabel("Precision (TP / TP + FP)")      # intuitively the ability of the classifier not to label as positive a sample that is negative.
+    plt.xlabel("Recall (TP / TP + FN)")         # intuitively the ability of the classifier to find all the positive samples
+    plt.plot(recall, precision, label="Support Classifier")
+    plt.plot([0, 1], [ratio, ratio], label="Random")             # Random classifier performance (i.e., proportion of positives)
+    plt.legend()
+    plt.title(f"PR Curve")
+    plt.xlim(0, 1.02)
+    plt.ylim(0, 1.02)
+    plt.savefig(out_dir + f"/prec_rec.png")
+    plt.clf()
+
+    # TODO: Plot threshold curve
+    leaf_idxs = []
+    for i, (clade, _, _) in enumerate(results):
+        if len(clade) <= 1:
+            leaf_idxs.append(i)
+    
+
+    f.set_size_inches(6.4, 4.8)
+    y_true = [y for i, (_, _, y) in enumerate(results)]
+    y_scores = [sup for i, (_, sup, _) in enumerate(results)]
+    ratio = sum(y_true) / len(y_true)
+
+
+    thresholds = np.linspace(0, 1, 21)
+    acc_sup = []
+    for thresh in thresholds:
+        correct = 0
+        for y, sup in zip(y_true, y_scores):
+            if (sup >= thresh and y == 1) or (sup < thresh and y == 0):
+                correct+= 1
+        
+        acc_sup.append(correct/ len(y_true))
+
+    plt.ylabel("Accuracy")
+    plt.xlabel("Threshold")
+    plt.plot(thresholds, acc_sup, label="Support Classifier")
+    plt.plot([0, 1], [ratio, ratio], label="Random")             # Random classifier performance (i.e., proportion of positives)
+    plt.legend()
+    plt.title(f"Accuracy vs Threshold")
+    plt.xlim(0, 1.02)
+    plt.ylim(ratio-0.02, 1.02)
+    plt.savefig(out_dir + f"/thresh_eval.png")
+
+
+
+
+
 
 
 @click.command("clade_results")
@@ -258,7 +389,7 @@ def clade_results(clade_dir, num_sim, method="historydag"):
             results = pickle.load(f)
         result_dict[trial] = results
 
-    window_size = int(len(results) * 0.1)
+    window_size = int(len(results) * 0.2)
     out_path = clade_dir + f"/figures/multi_line_w={window_size}.png"
 
     for trial in range(1, num_sim+1):
@@ -316,7 +447,7 @@ def sliding_window_plot(results, std_dev=False, window_size=200):
 
 
 
-
+cli.add_command(get_pars_score)
 cli.add_command(clade_results)
 cli.add_command(save_supports)
 cli.add_command(larch_usher)
