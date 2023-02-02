@@ -6,10 +6,10 @@ conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 # NOTE: This file must have executable permissions to be used with simulation pipeline
 
-rseed=$1
-sim=$2
-simdir=$3
-curr_dir=$4
+curr_dir=$1
+rseed=$2
+sim=$3
+simdir=$4
 rtree=$5
 
 cd $curr_dir

@@ -69,8 +69,8 @@ for clade in $(cat ../clades.txt); do
             simdir=$clade/$trial/"simulation"
             mkdir -p $simdir
 
-            sbatch -c 1 -J "$clade|inf|$trial" -o $simdir/sim.log \
-            ./../support_pipeline_scripts/simulate_trial.sh $rseed $sim $simdir ~/hdag-benchmark/data $rtree
+            sbatch -c 1 -J "$trial|$clade|sim" -o $simdir/sim.log \
+            ./../support_pipeline_scripts/simulate_trial.sh ~/hdag-benchmark/data $rseed $sim $simdir $rtree
         done
     done
 done

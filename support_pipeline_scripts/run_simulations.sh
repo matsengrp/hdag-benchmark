@@ -84,7 +84,7 @@ for clade in $(cat ../clades.txt); do
 
                 ctree=$simdir/collapsed_simulated_tree.nwk
                 ctreefasta=${ctree}.fasta
-                ctreefasta_with_refseq=$simdir/ctree_with_refseq.fasta
+                ctreefasta_with_refseq=$simdir/ctree_with_refseq.fasta  # Stores leaf sequences
 
                 # You made a bunch of new nodes when resolving so your tree.mapping
                 # is not completely correct any more

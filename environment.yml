@@ -16,3 +16,4 @@ dependencies:
   - seaborn
   - matplotlib
   - click
+  - dendropy

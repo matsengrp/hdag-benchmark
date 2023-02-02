@@ -5,8 +5,8 @@
 # Should output file containing node supports for every simulated dataset
 
 # Paramaters that determine how many trees to simulate for each clade
-num_res=2
-num_sim=2
+num_res=1
+num_sim=1
 let "num_trials = $num_sim * $num_res"
 # TODO: makes these parameters to pipeline script
 
@@ -62,10 +62,10 @@ for clade in $(cat ../clades.txt); do
         usher-sampled -v $ctreevcf -t $starttree -o $seedtree  --optimization_minutes=0
 
         echo "===> lusher optimizing..."
-        logdir=$dagdir/opt_info/optimazation_log
+        logdir=$dagdir/opt_info/optimization_log
         optdag_final=$dagdir/final_opt_dag.pb
 
-        python ~/hdag-benchmark/support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 1800 -o $dagdir -l $logdir
+        python ~/hdag-benchmark/support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 100 -o $dagdir -l $logdir
         python ~/hdag-benchmark/support_pipeline_scripts/cli.py save_supports -m "hdag" -t $ctree -i $optdag_final -o $dagdir/results.pkl
         echo ""
         echo ""

@@ -10,6 +10,8 @@ currdir=$1
 clade=$2
 trial=$3
 
+echo $currdir
+
 # cd into the data directory
 cd $currdir
 
@@ -43,7 +45,7 @@ echo "===> lusher optimizing..."
 logdir=$dagdir/opt_info/optimization_log
 optdag_final=$dagdir/final_opt_dag.pb
 
-python ~/hdag-benchmark/support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 10 -o $dagdir -l $logdir
+python ~/hdag-benchmark/support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 1000 -o $dagdir -l $logdir
 python ~/hdag-benchmark/support_pipeline_scripts/cli.py save_supports -m "hdag" -t $ctree -i $optdag_final -o $dagdir/results.pkl
 echo ""
 echo ""

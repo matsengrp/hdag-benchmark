@@ -2,8 +2,8 @@
 
 # Uses ...
 
-num_res=2
-num_sim=2
+num_res=10
+num_sim=10
 let "num_trials = $num_sim * $num_res"
 
 echo ""
@@ -29,13 +29,9 @@ for clade in $(cat ../clades.txt); do
         outdir=$cladedir/$trial/figures
         mkdir -p $outdir
 
-        python ~/hdag-benchmark/support_pipeline_scripts/cli.py agg -i $results -o $outdir
+        python ~/hdag-benchmark/support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2
     done
 
-    # TODO: Aggregate all results into a single plot
-    #       - This could be done in a couple of ways
-    #       (1) Append all results list together and do the sliding window on a much larger list
-    #       (2) Do sliding window on four separate lines, plot all 4 (or take the average somehow)
     mkdir -p $cladedir/figures
     python ~/hdag-benchmark/support_pipeline_scripts/cli.py clade_results -n $num_trials -c $cladedir
 done

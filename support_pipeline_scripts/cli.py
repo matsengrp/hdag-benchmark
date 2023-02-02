@@ -6,9 +6,14 @@ import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
-from sklearn.metrics import precision_recall_curve
-import numpy as np
+import dendropy
 
+import random
+import subprocess
+
+import seaborn as sns
+sns.set_theme()
+# plt.rcParams['text.usetex'] = True
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
@@ -90,7 +95,6 @@ def save_supports(method, tree_path, input_path, output_path):
             format (clade, estimated_support, in_tree)
     """
 
-
     # Map of taxon id (e.g., s1, s4, etc) to full sequence
     fasta_path = tree_path + ".fasta"
     taxId2seq = hdag.parsimony.load_fasta(fasta_path)
@@ -102,7 +106,7 @@ def save_supports(method, tree_path, input_path, output_path):
     if method == "hdag":
         support_list = hdag_output(node_set, input_path, taxId2seq)
     elif method == "beast":
-        support_list = beast_output(node_set, input_path, seq2taxId)
+        support_list = beast_output(node_set, input_path)
     else:
         assert False # TODO: Throw error
 
@@ -137,14 +141,13 @@ def hdag_output(node_set, pb_file, taxId2seq):
     sorted by estimated support, and portions that have the same support are randomly shuffled
     """
     dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
-    # TODO: Comment out this line... maybe
     dag.make_complete()
     dag.trim_optimal_weight() # Trim to the MP trees
     counts = dag.count_nodes(collapse=True) # TODO: double check that this is counting the right thing
     total_trees = dag.count_trees()
     
 
-    print("size of counts is:", len(counts))   # TODO: Check how many nodes are in the counts
+    print("size of counts is:", len(counts))
     print(f"There are {len(node_set)} nodes in TOI")
     dag.summary()
 
@@ -179,7 +182,85 @@ def hdag_output(node_set, pb_file, taxId2seq):
 
     return stats_list
 
-import subprocess
+# TODO: Specify a burn-in parameter???
+def beast_output(node_set, tree_file):
+    """Same as hdag output, but for BEAST."""
+
+    print("Generating dendropy tree list...")
+    dp_trees = dendropy.TreeList.get(
+            path=tree_file,
+            schema="nexus",
+            extract_comment_metadata=False,
+        )
+
+    # TODO: Look into sharding this file because apparently its enormous when loaded into main memory (>14 GB)
+    pickle.dump(dp_trees, open("dp_trees.pkl", "wb"))
+    dp_trees = pickle.load(open("dp_trees.pkl", "rb"))
+
+    total = len(dp_trees)
+    print(f"\tCreated tree list with {total} trees")
+
+    burn_in = int(0.1 * len(dp_trees))
+    node2count = {}
+    for i, tree in enumerate(dp_trees[burn_in:]):
+        node2cu = {}
+        curr_internal_name = 0
+        for node in tree.postorder_node_iter():
+            if node.is_leaf():
+                cu = [node.taxon.label]
+                node.label = node.taxon.label
+            else:
+                node.label = f"internal{curr_internal_name}"
+                curr_internal_name += 1
+                cu = []
+                for child in node.child_node_iter():
+                    cu.extend(list(node2cu[child.label]))
+            
+            cu = frozenset(cu)
+            node2cu[node.label] = cu
+            if cu not in node2count:
+                node2count[cu] = 0
+            node2count[cu] += 1
+
+        # NOTE: For debugging... Delete soon
+        # if i % 1000 == 0:
+        #     print(i)
+        #     print(tree)
+        #     print(node2count)
+        #     print(node2cu)
+
+    node2support = {}
+    for node, count in node2count.items():
+        node2support[node] = count / total
+
+
+    # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
+    # support and whether that node is in the true tree or not
+    node2stats = {}
+
+    # Get the support for all dag nodes
+    counter = 0
+    for id_node, est_sup in node2support.items():
+        if len(id_node) == 0:  # UA node
+            continue
+
+        node2stats[id_node] = (est_sup, id_node in node_set)
+    
+    # Get the support for all nodes in true tree
+    for id_node in node_set:
+        if id_node not in node2stats.keys():
+            node2stats[id_node] = (0, True)
+
+    print("Considering", len(node2stats), "nodes")
+    stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
+    random.shuffle(stats_list)
+    stats_list.sort(key=lambda el: el[1])
+
+    return stats_list
+    
+
+    return None
+
 
 
 # TODO: Implement a way to detect if you are slowing down, and then add the sample from any tree option    
@@ -212,7 +293,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-c", f"{round(int(count)/2)}",
             "-o", f"{out_dir}/opt_dag_1.pb",
             "-l", f"{log_dir}_1",
-            "--move-coeff-nodes", str(1),
+            "--move-coeff-nodes", str(2),
             "--move-coeff-pscore", str(0),
             "--sample-best-tree"            # NOTE: Might need to change this with different version of larch-usher
             ]
@@ -251,7 +332,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
     dag.make_complete()
     dag.to_protobuf_file(f"{out_dir}/complete_opt_dag.pb")
 
-    subprocess.run(["mkdir", "-p" f"{log_dir}_complete"])
+    subprocess.run(["mkdir", "-p", f"{log_dir}_complete"])
     args = [executable,
             "-i", f"{out_dir}/complete_opt_dag.pb",
             "-c", f"{round(int(count)/6)}",
@@ -269,11 +350,6 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
 
 
 
-def beast_output(node_sets, pb_file, seq2taxId):
-    """... """
-    return None
-
-
 ###################################################################################################
 #### Aggregation ##################################################################################
 ###################################################################################################
@@ -283,93 +359,52 @@ def beast_output(node_sets, pb_file, seq2taxId):
 @click.option('--input', '-i', help='file path to input list as a pickle.')
 @click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
 @click.option('--clade_name', '-c')
-def agg(input, out_dir, clade_name):
+@click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
+def agg(input, out_dir, clade_name, window_proportion=0.20):
     """Given the pickled file, aggregates results for support values"""
 
-    with open(input, "rb") as f:
-        results = pickle.load(f)
+    try:
+        with open(input, "rb") as f:
+            results = pickle.load(f)
+    except:
+        print(f"\t...Skipping {input}")
+        return
 
-    window_size = int(len(results) * 0.20)
-    out_path = out_dir + f"/fig_w={window_size}.png"
-    x, y = sliding_window_plot(results, window_size=window_size)
+    # Remove leaf nodes
+    res_no_leaves = []
+    for el in results:
+        if len(el[0]) > 1:
+            res_no_leaves.append(el)
+    results = res_no_leaves
 
-    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.7, 0.3])
+
+    window_size = int(len(results) * window_proportion)
+    out_path = out_dir + f"/min_max_fig_w={window_size}.png"
+    x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
+
+    # print("est\ttrue\tQ1\tQ3")
+    # for num, (i, j, k, l) in enumerate(zip(x, y, min_sup, max_sup)):
+    #     print(f"{num}\t{i:3f}\t{j:3f}\t{k:3f}\t{l:3f}")
+    # print(window_size)
+
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
     f.set_size_inches(7, 9)
-    f.suptitle(f"Clade {clade_name} Coverage Analysis")
 
+    ax1.set_title(f"Clade {clade_name} Coverage Analysis")
     ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results)})")
-    ax1.plot(x, y)
-    ax1.plot([0, 1], [0, 1])
+
+    ax1.plot(x, y, label="Support", color="red")
+    ax1.scatter(min_sup, y, color="orange", alpha=0.1)
+    ax1.scatter(max_sup, y, color="orange", alpha=0.1)
+    # ax1.fill_betweenx(y, min_sup, max_sup, alpha=0.2, color="orange", label="Support Range")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect")
+    ax1.legend()
     
     ax2.hist(x)
     ax2.set_xlabel("Estimated Support")
-    # ax2.set_yscale("log")
+    ax2.set_yscale("log")
     f.savefig(out_path)
     f.clf()
-
-    # TODO: Plot PR curves in different method
-    leaf_idxs = []
-    for i, (clade, _, _) in enumerate(results):
-        if len(clade) <= 1:
-            leaf_idxs.append(i)
-    
-
-    f.set_size_inches(6.4, 4.8)
-    y_true = [y for i, (_, _, y) in enumerate(results)]
-    y_scores = [sup for i, (_, sup, _) in enumerate(results)]
-    ratio = sum(y_true) / len(y_true)
-
-    precision, recall, thresholds = precision_recall_curve(y_true, y_scores)
-    # print(precision)
-    # print(recall)
-    # print(thresholds)
-    plt.ylabel("Precision (TP / TP + FP)")      # intuitively the ability of the classifier not to label as positive a sample that is negative.
-    plt.xlabel("Recall (TP / TP + FN)")         # intuitively the ability of the classifier to find all the positive samples
-    plt.plot(recall, precision, label="Support Classifier")
-    plt.plot([0, 1], [ratio, ratio], label="Random")             # Random classifier performance (i.e., proportion of positives)
-    plt.legend()
-    plt.title(f"PR Curve")
-    plt.xlim(0, 1.02)
-    plt.ylim(0, 1.02)
-    plt.savefig(out_dir + f"/prec_rec.png")
-    plt.clf()
-
-    # TODO: Plot threshold curve
-    leaf_idxs = []
-    for i, (clade, _, _) in enumerate(results):
-        if len(clade) <= 1:
-            leaf_idxs.append(i)
-    
-
-    f.set_size_inches(6.4, 4.8)
-    y_true = [y for i, (_, _, y) in enumerate(results)]
-    y_scores = [sup for i, (_, sup, _) in enumerate(results)]
-    ratio = sum(y_true) / len(y_true)
-
-
-    thresholds = np.linspace(0, 1, 21)
-    acc_sup = []
-    for thresh in thresholds:
-        correct = 0
-        for y, sup in zip(y_true, y_scores):
-            if (sup >= thresh and y == 1) or (sup < thresh and y == 0):
-                correct+= 1
-        
-        acc_sup.append(correct/ len(y_true))
-
-    plt.ylabel("Accuracy")
-    plt.xlabel("Threshold")
-    plt.plot(thresholds, acc_sup, label="Support Classifier")
-    plt.plot([0, 1], [ratio, ratio], label="Random")             # Random classifier performance (i.e., proportion of positives)
-    plt.legend()
-    plt.title(f"Accuracy vs Threshold")
-    plt.xlim(0, 1.02)
-    plt.ylim(ratio-0.02, 1.02)
-    plt.savefig(out_dir + f"/thresh_eval.png")
-
-
-
-
 
 
 
@@ -380,68 +415,129 @@ def clade_results(clade_dir, num_sim, method="historydag"):
     """Given the clade directory, performs coverage analysis across all simulations"""
 
     clade_name = clade_dir.split("/")[-1]
+    window_proportion = 0.01     # Length of window relative to number of nodes
 
+
+    # Multi-line Plot
     result_dict = {}
     for trial in range(1, num_sim+1):
-        # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes and their supports
+        # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
+        #   their supports and whether they're in the true tree or not
         result_path = clade_dir + f"/{trial}/results/historydag/results.pkl"
-        with open(result_path, "rb") as f:
-            results = pickle.load(f)
-        result_dict[trial] = results
+        
+        try:
+            with open(result_path, "rb") as f:
+                results = pickle.load(f)
+                result_dict[trial] = results
+        except:
+            print(f"\tSkipping {clade_dir} {trial}")
+            continue
+    
+    if len(result_dict) == 0:
+        return
 
-    window_size = int(len(results) * 0.2)
-    out_path = clade_dir + f"/figures/multi_line_w={window_size}.png"
 
-    for trial in range(1, num_sim+1):
-        x, y = sliding_window_plot(result_dict[trial], window_size=window_size)
+    avg_window_size = 0
+    avg_results_length = 0
+    for trial in result_dict.keys():
+        result = result_dict[trial]
+        window_size = int(len(result) * window_proportion)
+        avg_window_size += window_size
+        avg_results_length += len(result)
+        x, y = sliding_window_plot(result, window_size=window_size)
         plt.plot(x, y)
+    avg_results_length /= int(len(result_dict))
+    avg_window_size /= int(len(result_dict))
+
     plt.plot([0, 1], [0, 1])
     plt.xlabel("Estimated Support")
-    plt.ylabel(f"Empirical Probability (window_size={window_size}/{len(results)})")
+    plt.ylabel(f"Empirical Probability (window_size~{int(avg_window_size)}/{int(avg_results_length)})")
     plt.title(f"Aggregated {clade_name} Coverage Analysis")
+    out_path = clade_dir + f"/figures/multi_line_w={int(avg_window_size)}.png"
     plt.savefig(out_path)
     plt.clf()
 
 
-    
-    out_path = clade_dir + f"/figures/single_line_w={window_size}.png"
+
+    # Single-line Plot
 
     results_full = []
-    for k, v in result_dict.items():
-        results_full.extend(v)
+    for trial, results in result_dict.items():
+        toi_node_count = 0
+        num_leaves = 0
+        for result in results:
+            node = result[0]
+            if len(node) > 1:       # Removing leaves
+                results_full.append(result)
+                if result[2]:
+                    toi_node_count += 1
+            else:
+                # Checking that all leaves are in true tree
+                assert result[2]
+                num_leaves += 1
+        
+        # NOTE: Uncomment if you want clade size info about each tree
+        # print(f"{clade_name}/{trial} {toi_node_count} non-leaf nodes with {num_leaves} leaves")
     
+    print(f"\tsorting {len(results_full)} results...")
+    random.shuffle(results_full)
     results_full.sort(key=lambda el: el[1])
+
+
+    window_size = int(len(results_full) * window_proportion)
+    out_path = clade_dir + f"/figures/single_line_w={window_size}.png"
+    print(f"\tgenerating window plot at {out_path}...")
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
-    plt.plot(x, y)
-    plt.plot(x, pos_devs, linestyle='dashed', color='green')
-    plt.plot(x, neg_devs, linestyle='dashed', color='green')
-    plt.plot([0, 1], [0, 1])
-    plt.xlabel("Estimated Support")
-    plt.ylabel(f"Empirical Probability (window_size={window_size}/{len(results)})")
-    plt.title(f"Aggregated {clade_name} Coverage Analysis")
-    plt.savefig(out_path)
+
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
+    f.set_size_inches(7, 9)
+    ax1.set_title(f"Clade {clade_name} Coverage Analysis")
+
+    ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results_full)})")
+    ax1.plot(x, y, color="orange", label="Support Regressor")
+    ax1.fill_between(x, pos_devs, neg_devs, alpha=0.2, color="orange")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor")
+    ax1.legend()
+    
+    ax2.hist(x)
+    ax2.set_yscale("log")
+    ax2.set_xlabel("Estimated Support")
+    f.savefig(out_path)
+    f.clf()
 
 
-def sliding_window_plot(results, std_dev=False, window_size=200):
+def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
 
+    results.sort(key= lambda result: result[1])
+
     x, y = [], []
-    devs = []
+    devs, min_sup, max_sup = [], [], []
     side_len = int(window_size/2)
-    for i, (_, est_sup, _) in enumerate(results):
+    for i, (_, est_sup, in_tree) in enumerate(results):
         x.append(est_sup)
         window = [int(el[2]) for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
         y.append(sum(window) / len(window))
-
+        
+        # Standard deviations are over the window of in_true_tree variable (ie 1 or 0)
         if std_dev:
             avg = y[i]
             sq_diff = [(el - avg)**2 for el in window]
-            devs.append((sum(sq_diff) / len(sq_diff))) #** 0.5) # TODO: Should we be using variance or std dev
-    
+            devs.append((sum(sq_diff) / len(sq_diff)))
+
+        # Quartiles are between estimated support values
+        elif sup_range:
+            support_window = [el[1] for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
+            # First and fourth quartiles
+            min_sup.append(support_window[int(len(support_window)/4)])
+            max_sup.append(support_window[-int(len(support_window)/4)])
+
     if std_dev:
         pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
         neg_devs = [y_val - dev for y_val, dev in zip(y, devs)]
         return x, y, pos_devs, neg_devs
+    elif sup_range:
+        return x, y, min_sup, max_sup
     else:
         return x, y
 
