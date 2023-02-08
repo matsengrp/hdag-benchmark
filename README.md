@@ -43,7 +43,7 @@ The `*_cluster.sh` scripts assume access to a cluster with slurm workload manage
 
 You can run a batch of simulations with 
 
-    bash run_simulations_cluster
+    bash run_simulations_cluster.sh
 
 This extracts tree topologies from teh big UShER MAT, and simulates sequences for each clade using PhastSim on those topologies.
 There are additional parameters near the top of the script (these will likely turn into command line parameters soon).
@@ -62,7 +62,7 @@ In this directory,
 
 After running simulations, you can infer supports using 
 
-    bash run_inference_cluster
+    bash run_inference_cluster.sh
 
 This has similar parameters to the simulation script near the top of the file
 
