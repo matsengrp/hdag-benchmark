@@ -58,7 +58,7 @@ These simulations can be found at `data/<clade-name>/<trial-number>/simulation`.
 In this directory, 
 `ctree_with_refseq.fasta` contains the leaves of the simulated tree and the ancestral sequence and `collapsed_simulated_tree.nwk` contains the simulated tree.
 
-## Support Inference
+### Inference
 
 After running simulations, you can infer supports using 
 
