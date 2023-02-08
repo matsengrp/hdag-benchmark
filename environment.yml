@@ -1,4 +1,4 @@
-name: hdag-benchmark-2
+name: hdag-benchmark
 channels:
   - conda-forge
   - bioconda

@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# Uses ...
+# Aggregates result.pkl files for all trials. Assumes directory structure created by simulation
+# and inference scripts
+# Usage is aggregate_results <method> (where <method> is either beast or historydag)
 
+method=$1
 num_res=10
 num_sim=10
 let "num_trials = $num_sim * $num_res"
@@ -25,13 +28,14 @@ for clade in $(cat ../clades.txt); do
 
     for trial in $(seq $num_trials); do
         echo "$clade: $trial"
-        results=$cladedir/$trial/results/historydag/results.pkl
-        outdir=$cladedir/$trial/figures
+        results=$cladedir/$trial/results/$method/results.pkl
+        outdir=$cladedir/$trial/figures/$method
         mkdir -p $outdir
 
-        python ~/hdag-benchmark/support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2
+        python ~/hdag-benchmark/support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
     done
 
-    mkdir -p $cladedir/figures
-    python ~/hdag-benchmark/support_pipeline_scripts/cli.py clade_results -n $num_trials -c $cladedir
+    outdir=$cladedir/figures/$method
+    mkdir -p $outdir
+    python ~/hdag-benchmark/support_pipeline_scripts/cli.py clade_results -n $num_trials -c $cladedir -o $outdir -m $method
 done

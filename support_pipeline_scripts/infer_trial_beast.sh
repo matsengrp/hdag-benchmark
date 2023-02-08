@@ -66,7 +66,7 @@ beast -overwrite $xml_file
 
 # Extract support from trees
 # TODO: Change this to not have the 2 at the end
-conda activate hdag-benchmark-2
+conda activate hdag-benchmark
 python ~/hdag-benchmark/support_pipeline_scripts/cli.py save_supports -m "beast" -t $ctree -i $tree_file -o $beastdir/results.pkl
 echo ""
 echo ""

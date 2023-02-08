@@ -164,7 +164,6 @@ def hdag_output(node_set, pb_file, taxId2seq):
             continue
 
         # Convert cg label to taxon id
-        # TODO: Fix key error labels seq is not among taxID
         id_node = frozenset([seq2taxId[label.compact_genome.to_sequence()] for label in node])
         est_sup = counts[node] / total_trees
         node2stats[id_node] = (est_sup, id_node in node_set)
@@ -257,9 +256,6 @@ def beast_output(node_set, tree_file):
     stats_list.sort(key=lambda el: el[1])
 
     return stats_list
-    
-
-    return None
 
 
 
@@ -358,9 +354,10 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
 @click.command("agg")
 @click.option('--input', '-i', help='file path to input list as a pickle.')
 @click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
+@click.option('--method', '-m', default='historydag')
 @click.option('--clade_name', '-c')
 @click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
-def agg(input, out_dir, clade_name, window_proportion=0.20):
+def agg(input, out_dir, clade_name, method, window_proportion=0.20):
     """Given the pickled file, aggregates results for support values"""
 
     try:
@@ -378,7 +375,11 @@ def agg(input, out_dir, clade_name, window_proportion=0.20):
     results = res_no_leaves
 
 
-    window_size = int(len(results) * window_proportion)
+    if method == "beast":
+        window_size = 100
+    else:
+        window_size = int(len(result) * window_proportion)
+
     out_path = out_dir + f"/min_max_fig_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
@@ -410,20 +411,21 @@ def agg(input, out_dir, clade_name, window_proportion=0.20):
 
 @click.command("clade_results")
 @click.option('--clade_dir', '-c', help='path to clade directory.')
+@click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
 @click.option('--num_sim', '-n', default=1, help='number of simulations to average.')
-def clade_results(clade_dir, num_sim, method="historydag"):
+@click.option('--method', '-m', default='historydag')
+@click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
+def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
     """Given the clade directory, performs coverage analysis across all simulations"""
 
     clade_name = clade_dir.split("/")[-1]
-    window_proportion = 0.01     # Length of window relative to number of nodes
-
 
     # Multi-line Plot
     result_dict = {}
     for trial in range(1, num_sim+1):
         # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
         #   their supports and whether they're in the true tree or not
-        result_path = clade_dir + f"/{trial}/results/historydag/results.pkl"
+        result_path = clade_dir + f"/{trial}/results/{method}/results.pkl"
         
         try:
             with open(result_path, "rb") as f:
@@ -434,14 +436,19 @@ def clade_results(clade_dir, num_sim, method="historydag"):
             continue
     
     if len(result_dict) == 0:
+        print("\n==>No results to print :(\n")
         return
-
 
     avg_window_size = 0
     avg_results_length = 0
     for trial in result_dict.keys():
         result = result_dict[trial]
-        window_size = int(len(result) * window_proportion)
+
+        if method == "beast":
+            window_size = 100
+        else:
+            window_size = int(len(result) * window_proportion)
+        
         avg_window_size += window_size
         avg_results_length += len(result)
         x, y = sliding_window_plot(result, window_size=window_size)
@@ -453,7 +460,7 @@ def clade_results(clade_dir, num_sim, method="historydag"):
     plt.xlabel("Estimated Support")
     plt.ylabel(f"Empirical Probability (window_size~{int(avg_window_size)}/{int(avg_results_length)})")
     plt.title(f"Aggregated {clade_name} Coverage Analysis")
-    out_path = clade_dir + f"/figures/multi_line_w={int(avg_window_size)}.png"
+    out_path = out_dir + f"/multi_line_w={int(avg_window_size)}.png"
     plt.savefig(out_path)
     plt.clf()
 
@@ -484,8 +491,12 @@ def clade_results(clade_dir, num_sim, method="historydag"):
     results_full.sort(key=lambda el: el[1])
 
 
-    window_size = int(len(results_full) * window_proportion)
-    out_path = clade_dir + f"/figures/single_line_w={window_size}.png"
+    if method == "beast":
+        window_size = 100
+    else:
+        window_size = int(len(result) * window_proportion)
+
+    out_path = out_dir + f"/single_line_w={window_size}.png"
     print(f"\tgenerating window plot at {out_path}...")
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
 
