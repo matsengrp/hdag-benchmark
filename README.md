@@ -23,7 +23,7 @@ So, we create a new conda environment to switch to when loading the XML files as
     conda activate beast-xml
     pip install beast2-xml
 
-We also make ues of some packages in the most recent version of history dag.
+We also make ues of some packages in the most recent version of history dag (specifically, the partial-sankoff branch).
 To use these, clone the history dag repository and run
     
     conda activate hdag-benchmark
