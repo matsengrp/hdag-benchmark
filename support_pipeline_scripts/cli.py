@@ -275,11 +275,15 @@ def beast_output(node_set, tree_file):
 def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir, pars_score, node_score):
     """Python CLI for driving larch-usher"""
 
+    # E.g., results/historydag/
     os.chdir(f"{out_dir}")
     # subprocess.run(["cd", out_dir]) # One process can't change anothers working dir
 
     if int(count) <= 2:
         return
+
+    print("\n\tCurrent directory in python:", out_dir)
+
 
     # Cast a wide net by prioritizing new nodes only
     print("Running initial iterations of larch-usher...")
