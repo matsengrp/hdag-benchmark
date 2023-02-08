@@ -1,4 +1,4 @@
-name: hdag
+name: hdag-benchmark
 channels:
   - conda-forge
   - bioconda
@@ -8,4 +8,12 @@ dependencies:
   - mrbayes
   - newick_utils
   - parallel
+  - usher
+  - gctree
+  - phylip
+  - bcftools
   - pip
+  - seaborn
+  - matplotlib
+  - click
+  - dendropy

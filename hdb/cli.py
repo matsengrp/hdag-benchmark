@@ -1,8 +1,13 @@
 """Command line interface."""
 
 import sys
-
 import click
+import hdb.summary as summary
+import hdb.collapse_tree as ct
+import hdb.aggregate_dnapars_trees as agg
+import ete3
+import pickle
+import random
 
 
 # Entry point
@@ -26,11 +31,164 @@ def cli():
 
 
 @cli.command()
-@click.argument("settings_json", required=True, type=click.Path(exists=True))
-@click.option("--make-paths-absolute", is_flag=True, help="Make paths absolute.")
-def example(settings_json, make_paths_absolute):
-    """Generate a file using one of our templates and the settings."""
-    print("Invoked with", settings_json, make_paths_absolute)
+@click.argument("outfiles", nargs=-1)
+@click.option("-r", "--root", help="name for outgroup sequence")
+@click.option("-a", "--abundance_file", help="filepath to abundance mapping")
+@click.option("-o", "--output_path", help="filepath to write pickled hDAG")
+def aggregate_dnapars_trees(outfiles, root, abundance_file, output_path):
+    """Process dnapars outfiles into a history DAG."""
+    dag = agg.aggregate_dnapars_trees(outfiles, root, abundance_file)
+    with open(output_path, 'wb') as fh:
+        pickle.dump(dag, file=fh)
+
+@cli.command()
+@click.argument("input_path")
+@click.argument("out_path_base")
+def numerify_taxon_names(input_path, out_path_base):
+    """Convert taxon names to s<number>, outputting a "mapping file" and a renamed newick."""
+    # Equivalent-ish to the original bash script:
+    # orig_path=$1
+    # out_path_base=$2
+    # mapping_path=${out_path_base}.mapping
+    # numerified=${out_path_base}.n.nwk
+    # echo "ancestral ancestral" > $mapping_path
+    # nw_labels $orig_path | grep -v ancestral | awk '{print $0 " s" NR}' >> $mapping_path
+    # nw_rename $orig_path $mapping_path > $numerified
+
+    mapping_path = out_path_base + ".mapping"
+    numerified_path = out_path_base + ".n.nwk"
+
+    tree = ete3.Tree(input_path, format=1)
+    mapping = {}
+    curr_num = 1
+    for node in tree.traverse("postorder"):
+        mapping[node.name] = f"s{curr_num}"
+        node.name = f"s{curr_num}"
+        curr_num += 1
+
+    tree.write(format=1, outfile=numerified_path)
+    with open(mapping_path, "w") as f:
+        for seq_id, tax_id in mapping.items():
+            print(f"{seq_id} {tax_id}", file=f)
+
+@cli.command()
+@click.argument("indags", nargs=-1)
+@click.option("-o", "--output_path", help="filepath to write pickled hDAG")
+def merge_dags(indags, output_path):
+    def load_dag(indag):
+        with open(indag, 'rb') as fh:
+            dag = pickle.load(fh)
+        return dag
+    
+    dag = agg.merge_dags(load_dag(indag) for indag in indags)
+    with open(output_path, 'wb') as fh:
+        pickle.dump(dag, file=fh)
+
+@cli.command()
+@click.argument("fasta_paths", nargs=-1)
+@click.option("-o", "--output-path", default="summary.csv", help="CSV output path.")
+def alnsummarize(fasta_paths, output_path):
+    """Summarize a collection of alignments via AMAS."""
+    df = summary.summary_df_of_fasta_paths(fasta_paths)
+    df.to_csv(output_path)
+
+@cli.command()
+@click.argument("input_newick")
+@click.argument("input_fasta")
+@click.argument("output_newick")
+def collapse_tree(input_newick, input_fasta, output_newick):
+    with open(input_newick, 'r') as fh:
+        intree = ct.load_phastsim_newick(fh.read())
+    infasta = load_fasta(input_fasta)
+    outtree = ct.collapse_tree(intree, infasta)
+
+    # TODONE: Figure out why tree is not fully collapsed
+    # Confirm that our tree is fully collapsed
+    # for node in outtree.traverse():
+    #     if not (node.is_root() or node.is_leaf()) and len(node.mutations) == 0:
+    #         print("Bad node")
+
+    outtree.write(features=["mutations"], format_root_node=True, outfile=output_newick)
+    variant_sites = set()
+    for node in outtree.traverse():
+        for mut in node.mutations:
+            variant_sites.add(int(mut[1:-1]))
+    variant_sites = list(sorted(variant_sites))
+    with open(output_newick + '.variant_sites.txt', 'w') as fh:
+        fh.write(' '.join(str(num) for num in variant_sites))
+    
+    def excise_variants(seq):
+        return ''.join(seq[idx - 1] for idx in variant_sites)
+
+    with open(output_newick + '.fasta', 'w') as fh, open(output_newick + '.variant_sites.fasta', 'w') as fhvariants:
+        for seqname in sorted((n.name for n in outtree.get_leaves()),
+                              key=lambda name: int(name[1:])):
+            print('>' + seqname, file=fh)
+            print('>' + seqname, file=fhvariants)
+            print(infasta[seqname], file=fh)
+            print(excise_variants(infasta[seqname]), file=fhvariants)
+
+
+@cli.command()
+@click.option("-i", "--input-path", help="Newick tree input path.")
+@click.option("-o", "--output-path", help="Output path.")
+@click.option("-s", "--resolve-seed", default=1)
+def resolve_multifurcations(input_path, output_path, resolve_seed):
+    tree = ete3.Tree(input_path, format=1)
+    resolve_polytomy(tree, resolve_seed)
+    tree.write(outfile=output_path, format=1)
+
+
+def resolve_polytomy(tree, seed):
+        """
+        Given an ete tree, resolves all polytomies by creating a
+        uniformly random bifurcating tree that is consistent with
+        the multifurcating one.
+        """
+
+        random.seed(seed)
+
+        # TODO: Consider ways of partially resolving this tree...
+        def _resolve(node):
+            new_node_name = 1
+            if len(node.children) > 2:
+                node_list = list(node.children)
+                node.children = []
+                while len(node_list) > 2:
+                    # Randomly sample a pair of nodes
+                    pair = random.sample(range(0, len(node_list)-1), 2)
+                    pair.sort()
+                    
+                    # merge under a parent node
+                    par = ete3.Tree()
+                    par.name = f"r{new_node_name}"
+                    new_node_name += 1
+                    par.add_child(node_list.pop(pair[1]))
+                    par.add_child(node_list.pop(pair[0]))
+
+                    # insert into list for this node to be further merged
+                    node_list.append(par)
+                
+                node.add_child(node_list[0])
+                node.add_child(node_list[1])
+
+        target = [tree]
+        target.extend([n for n in tree.traverse("postorder")])
+        for n in target:
+            _resolve(n)
+
+
+
+def load_fasta(fastapath):
+    fasta_records = []
+    current_seq = ''
+    with open(fastapath, 'r') as fh:
+        for line in fh:
+            if line[0] == '>':
+                fasta_records.append([line[1:].strip(), ''])
+            else:
+                fasta_records[-1][-1] += line.strip()
+    return dict(fasta_records)
 
 
 if __name__ == "__main__":
