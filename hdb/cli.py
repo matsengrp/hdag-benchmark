@@ -102,12 +102,6 @@ def collapse_tree(input_newick, input_fasta, output_newick):
     infasta = load_fasta(input_fasta)
     outtree = ct.collapse_tree(intree, infasta)
 
-    # TODONE: Figure out why tree is not fully collapsed
-    # Confirm that our tree is fully collapsed
-    # for node in outtree.traverse():
-    #     if not (node.is_root() or node.is_leaf()) and len(node.mutations) == 0:
-    #         print("Bad node")
-
     outtree.write(features=["mutations"], format_root_node=True, outfile=output_newick)
     variant_sites = set()
     for node in outtree.traverse():

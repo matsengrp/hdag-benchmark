@@ -17,8 +17,6 @@ eval "$(conda shell.bash hook)"
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
-# 
-cd ~/hdag-benchmark/data
 
 for clade in $(cat ../clades.txt); do
     # if value of $var starts with #, ignore it
@@ -32,10 +30,10 @@ for clade in $(cat ../clades.txt); do
         outdir=$cladedir/$trial/figures/$method
         mkdir -p $outdir
 
-        python ~/hdag-benchmark/support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
+        python support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
     done
 
     outdir=$cladedir/figures/$method
     mkdir -p $outdir
-    python ~/hdag-benchmark/support_pipeline_scripts/cli.py clade_results -n $num_trials -c $cladedir -o $outdir -m $method
+    python support_pipeline_scripts/cli.py clade_results -n $num_trials -c $cladedir -o $outdir -m $method
 done

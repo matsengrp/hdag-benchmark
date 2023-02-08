@@ -19,8 +19,8 @@ eval "$(conda shell.bash hook)"
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
-mkdir -p ~/hdag-benchmark/data
-cd ~/hdag-benchmark/data
+mkdir -p data
+cd data
 
 # Get sarscov usher tree and reference sequence
 bigtree=public-2022-10-01.all.masked.pb.gz
@@ -70,7 +70,7 @@ for clade in $(cat ../clades.txt); do
             mkdir -p $simdir
 
             sbatch -c 1 -J "$trial|$clade|sim" -o $simdir/sim.log \
-            ./../support_pipeline_scripts/simulate_trial.sh ~/hdag-benchmark/data $rseed $sim $simdir $rtree
+            ./../support_pipeline_scripts/simulate_trial.sh $PWD $rseed $sim $simdir $rtree
         done
     done
 done

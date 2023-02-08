@@ -21,9 +21,10 @@ export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 # Path to larch-usher executable (needs to be pre-built)
 larch_usher_exec=/home/whowards/larch/larch/build/larch-usher
 
-cd ~/hdag-benchmark/data
 
-datadir=~/hdag-benchmark/data
+datadir=data
+cd $datadir
+
 for clade in $(cat ../clades.txt); do
 
     # if value of $var starts with #, ignore it

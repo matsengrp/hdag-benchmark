@@ -8,3 +8,4 @@ _output
 temp.txt
 notes.txt
 *.fasta
+*.csv
