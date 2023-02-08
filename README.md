@@ -35,6 +35,7 @@ Make sure you are not in the `beast2-xml` environment, as this could break it.
 
 Currently, our scripts for running support experiments is located in `support_pipeline_scripts`
 (this might change soon and they'll go in `hbd/scripts`).
+These scripts assume that you are running them from the `hdag-benchmark` directory.
 Edit the `clades.txt` file to determine which PANGO clades will be simulated/analyzed.
 If a `#` is put in front of a clade name (no space), it will be ignored.
 The `*_cluster.sh` scripts assume access to a cluster with slurm workload manager.
@@ -43,7 +44,7 @@ The `*_cluster.sh` scripts assume access to a cluster with slurm workload manage
 
 You can run a batch of simulations with 
 
-    bash run_simulations_cluster.sh
+    bash support_pipeline_scripts/run_simulations_cluster.sh
 
 This extracts tree topologies from teh big UShER MAT, and simulates sequences for each clade using PhastSim on those topologies.
 There are additional parameters near the top of the script (these will likely turn into command line parameters soon).
@@ -62,7 +63,7 @@ In this directory,
 
 After running simulations, you can infer supports using 
 
-    bash run_inference_cluster.sh
+    bash support_pipeline_scripts/run_inference_cluster.sh
 
 This has similar parameters to the simulation script near the top of the file
 
