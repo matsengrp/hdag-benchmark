@@ -80,8 +80,8 @@ This will produce a `results.pkl` in the directory
 
 for each clade and trial. This is a pickled list of tuples `(clade, estimate-support, in-tree)`, where
 
-    1. `clade` is the set of all taxa under a particular node.
-    2. `estimate-support` is the inferred support for that node.
-    3. `in-tree` is a boolean that indicates whether that node is in the true tree.
+-`clade` is the set of all taxa under a particular node.
+-`estimate-support` is the inferred support for that node.
+-`in-tree` is a boolean that indicates whether that node is in the true tree.
 
 This direcotry also includes other information about the inference such as a log of trees for beast and the optimized dag.
