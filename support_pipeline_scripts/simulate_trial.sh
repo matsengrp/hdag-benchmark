@@ -6,6 +6,7 @@ conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 # NOTE: This file must have executable permissions to be used with simulation pipeline
 
+# This should always be the full path to data directory
 curr_dir=$1
 rseed=$2
 sim=$3
@@ -46,3 +47,5 @@ cat $ctreefasta >> $ctreefasta_with_refseq
 # reference, but not include it as a sample in the vcf.
 ctreevcf=${ctreefasta_with_refseq}.vcf
 faToVcf $ctreefasta_with_refseq $ctreevcf
+
+python ../support_pipeline_scripts/cli.py get_pars_score -s $simdir

@@ -1,4 +1,4 @@
-
+#!/bin/bash
 # Shell script that uses dnapars to compute the best parsimony score for
 #   a tree constructed on a fasta.
 # usage: bash dnapars_parsimony_score.sh input.fasta root_sequence_name output_directory
@@ -33,4 +33,4 @@ old_dir=$(pwd)
 cd $prefix
 dnapars < dnapars.cfg > dnapars.log
 cd $old_dir
-grep "requires a total of" $prefix/outfile
+grep "requires a total of" $prefix/outfile > $outdir/dnapars_output.txt

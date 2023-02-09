@@ -9,6 +9,7 @@
 # Paramaters that determine how many trees to simulate for each clade
 num_res=10
 num_sim=10
+
 # TODO: makes these parameters for inference and simulation scripts
 
 echo ""
