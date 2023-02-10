@@ -7,7 +7,7 @@
 # Paramaters that determine how many trees to simulate for each clade
 num_res=10
 num_sim=10
-method="hdag"
+method="beast"
 let "num_trials = $num_sim * $num_res"
 
 echo ""
@@ -17,9 +17,6 @@ set -eu
 eval "$(conda shell.bash hook)"
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
-
-# Path to larch-usher executable (needs to be pre-built)
-larch_usher_exec=/home/whowards/larch/larch/build/larch-usher
 
 
 datadir=data

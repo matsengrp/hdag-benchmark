@@ -365,9 +365,6 @@ def beast_output(node_set, tree_file,num_trees=1e9):
 
     node2count = {}
     for i, tree in enumerate(iter_nexus_trees(tree_file)):
-        # TODO: Convert this to ete format and reroot on ancestral sequence.
-        # --> Make sure that your XML file includes ancestral sequence
-
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
 
         node2cu = {}
