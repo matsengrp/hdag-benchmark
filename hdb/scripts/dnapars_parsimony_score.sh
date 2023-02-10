@@ -11,11 +11,12 @@ rootname=$2
 outdir=$3
 prefix=$outdir/dnapars
 
-# TODO: Why does this not work when dir already exists
 rm -rf $prefix
 mkdir -p $prefix
 
-deduplicate $infasta --root $rootname --idmapfile idmap.txt > $prefix/deduplicated.phylip
+# TODO: Test that outdir works
+
+deduplicate $infasta --root $rootname --idmapfile $prefix/idmap.txt > $prefix/deduplicated.phylip
 realpath $prefix/deduplicated.phylip > $prefix/dnapars.cfg
 echo "J
 1

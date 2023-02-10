@@ -80,15 +80,14 @@ def get_pars_score(sim_dir):
     # This ouputs to simdir/dnapars_output.txt
     subprocess.run([
         "dnapars_parsimony_score.sh",
-        var_sites_prefix + "_with_refseq.fasta",
-        name,
-        sim_dir
+        var_sites_prefix + "_with_refseq.fasta",    # infasta
+        name,                                       # root_name
+        sim_dir                                     # out_dir
     ])
 
     with open(sim_dir + "/dnapars_output.txt", "r") as f:
         line = f.readline()
         temp = line.strip().split(" ")
-        print(temp)
         best_possible = float(temp[-1])
 
 
@@ -462,7 +461,7 @@ def agg(input, out_dir, clade_name, method, window_proportion=0.20):
     else:
         window_size = int(len(results) * window_proportion)
 
-    out_path = out_dir + f"/min_max_fig_w={window_size}.png"
+    out_path = out_dir + f"/support_quartiles_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
     # print("est\ttrue\tQ1\tQ3")

@@ -13,6 +13,7 @@ sim=$3
 simdir=$4
 rtree=$5
 
+# NOTE: Should always be data directory
 cd $curr_dir
 
 # Simulate mutations on the tree until we get one without convergent evolution
