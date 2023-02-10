@@ -128,8 +128,17 @@ def get_pars_score(sim_dir):
     # just counts mutations between simulated internal node sequences
     tree_score = parsimony_score(tree)
 
-    # computes the best possible parsimony score of any labeling on tree's topology
-    max_score = sankoff_upward(tree, len(tree.sequence))
+    # computes the best possible parsimony score of any labeling on tree's
+    # topology, with root sequence constrained.
+    # first replace all internal, non-root sequences with N's, then do
+    # sankoff_upward with use_internal_node_sequences True.
+    sankoff_tree = tree.copy()
+    for node in sankoff_tree.traverse():
+        if node.is_root() or node.is_leaf():
+            continue
+        else:
+            node.sequence = "N" * len(tree.sequence)
+    max_score = sankoff_upward(sankoff_tree, len(sankoff_tree.sequence), use_internal_node_sequences=True)
 
     stats_dict = {
         "num_leaves": num_leaves,
