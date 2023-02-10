@@ -58,15 +58,14 @@ conda activate beast-xml
 xml_file=default.xml
 beast2-xml.py \
 --fastaFile $ctreefasta_with_refseq > $xml_file \
---chainLength 1000000000 \
+--chainLength 1e9 \
 --treeLogEvery 1000
 
 # Run beast
 beast -overwrite $xml_file
 
 # Extract support from trees
-# TODO: Change this to not have the 2 at the end
 conda activate hdag-benchmark
-python ~/hdag-benchmark/support_pipeline_scripts/cli.py save_supports -m "beast" -t $ctree -i $tree_file -o $beastdir/results.pkl
+python ../support_pipeline_scripts/cli.py save_supports -m "beast" -t $ctree -i $tree_file -o $beastdir/results.pkl
 echo ""
 echo ""

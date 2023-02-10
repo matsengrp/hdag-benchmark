@@ -11,6 +11,7 @@ import json
 
 import random
 import subprocess
+from hdb.newick_parser.tree_transformer import iter_nexus_trees
 
 import seaborn as sns
 sns.set_theme()
@@ -258,52 +259,134 @@ def hdag_output(node_set, pb_file, taxId2seq):
 
     return stats_list
 
-# TODO: Specify a burn-in parameter???
-def beast_output(node_set, tree_file):
+## TODO: Specify a burn-in parameter???
+# def beast_output(node_set, tree_file):
+#     """Same as hdag output, but for BEAST."""
+
+#     print("Generating dendropy tree list...")
+#     dp_trees = dendropy.TreeList.get(
+#             path=tree_file,
+#             schema="nexus",
+#             extract_comment_metadata=False,
+#         )
+
+#     # TODO: Look into sharding this file because apparently its enormous when loaded into main memory (>14 GB)
+#     pickle.dump(dp_trees, open("dp_trees.pkl", "wb"))
+#     dp_trees = pickle.load(open("dp_trees.pkl", "rb"))
+
+#     total = len(dp_trees)
+#     print(f"\tCreated tree list with {total} trees")
+
+#     burn_in = int(0.1 * len(dp_trees))
+#     node2count = {}
+#     for i, tree in enumerate(dp_trees[burn_in:]):
+#         node2cu = {}
+#         curr_internal_name = 0
+#         for node in tree.postorder_node_iter():
+#             if node.is_leaf():
+#                 cu = [node.taxon.label]
+#                 node.label = node.taxon.label
+#             else:
+#                 node.label = f"internal{curr_internal_name}"
+#                 curr_internal_name += 1
+#                 cu = []
+#                 for child in node.child_node_iter():
+#                     cu.extend(list(node2cu[child.label]))
+            
+#             cu = frozenset(cu)
+#             node2cu[node.label] = cu
+#             if cu not in node2count:
+#                 node2count[cu] = 0
+#             node2count[cu] += 1
+
+#         # NOTE: For debugging... Delete soon
+#         # if i % 1000 == 0:
+#         #     print(i)
+#         #     print(tree)
+#         #     print(node2count)
+#         #     print(node2cu)
+
+#     node2support = {}
+#     for node, count in node2count.items():
+#         node2support[node] = count / total
+
+
+#     # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
+#     # support and whether that node is in the true tree or not
+#     node2stats = {}
+
+#     # Get the support for all dag nodes
+#     counter = 0
+#     for id_node, est_sup in node2support.items():
+#         if len(id_node) == 0:  # UA node
+#             continue
+
+#         node2stats[id_node] = (est_sup, id_node in node_set)
+    
+#     # Get the support for all nodes in true tree
+#     for id_node in node_set:
+#         if id_node not in node2stats.keys():
+#             node2stats[id_node] = (0, True)
+
+#     print("Considering", len(node2stats), "nodes")
+#     stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
+#     random.shuffle(stats_list)
+#     stats_list.sort(key=lambda el: el[1])
+
+#     return stats_list
+
+def beast_output(node_set, tree_file,num_trees=1e9):
     """Same as hdag output, but for BEAST."""
 
-    print("Generating dendropy tree list...")
-    dp_trees = dendropy.TreeList.get(
-            path=tree_file,
-            schema="nexus",
-            extract_comment_metadata=False,
-        )
+    burn_in = int(0.1 * num_trees)
 
-    # TODO: Look into sharding this file because apparently its enormous when loaded into main memory (>14 GB)
-    pickle.dump(dp_trees, open("dp_trees.pkl", "wb"))
-    dp_trees = pickle.load(open("dp_trees.pkl", "rb"))
+    def reroot(new_root):
+        """ Edits the tree that the given node, new_root, is a part of so that it becomes the root.
+        Returns pointer to the new root. Also, removes any unifurcations caused by edits.
+        """
+        node_path = [new_root]
+        curr = new_root
+        while not curr.is_root():
+            node_path.append(curr.up)
+            curr = curr.up
 
-    total = len(dp_trees)
-    print(f"\tCreated tree list with {total} trees")
+        root = node_path[-1]
+        delete_root = len(root.children) <= 2
+        
+        while len(node_path) >= 2:
+            curr_node = node_path[-1]
+            curr_child = node_path[-2]
+            curr_child.detach()
+            curr_child.add_child(curr_node)
+            node_path = node_path[:-1]
+        if delete_root:
+            root.delete()
+        return curr_child
 
-    burn_in = int(0.1 * len(dp_trees))
     node2count = {}
-    for i, tree in enumerate(dp_trees[burn_in:]):
+    for i, tree in enumerate(iter_nexus_trees(tree_file)):
+        # TODO: Convert this to ete format and reroot on ancestral sequence.
+        # --> Make sure that your XML file includes ancestral sequence
+
+        rerooted = reroot(tree.search_nodes(name="ancestral")[0])
+
         node2cu = {}
         curr_internal_name = 0
-        for node in tree.postorder_node_iter():
+        for node in tree.traverse("postorder"):
             if node.is_leaf():
-                cu = [node.taxon.label]
-                node.label = node.taxon.label
+                cu = [node.name]
             else:
-                node.label = f"internal{curr_internal_name}"
+                node.name = f"internal{curr_internal_name}"
                 curr_internal_name += 1
                 cu = []
-                for child in node.child_node_iter():
-                    cu.extend(list(node2cu[child.label]))
+                for child in node.children:
+                    cu.extend(list(node2cu[child.name]))
             
             cu = frozenset(cu)
-            node2cu[node.label] = cu
+            node2cu[node.name] = cu
             if cu not in node2count:
                 node2count[cu] = 0
             node2count[cu] += 1
-
-        # NOTE: For debugging... Delete soon
-        # if i % 1000 == 0:
-        #     print(i)
-        #     print(tree)
-        #     print(node2count)
-        #     print(node2cu)
 
     node2support = {}
     for node, count in node2count.items():
