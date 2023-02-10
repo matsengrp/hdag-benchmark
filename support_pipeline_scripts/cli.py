@@ -44,12 +44,11 @@ def parse_clade_stats(in_file):
             name = row[0]
             leaf_count = int(row[1])
 
-            if leaf_count <= 150 and leaf_count > 100:
+            if leaf_count <= 100 and leaf_count > 50:
                 print(name, "\t", leaf_count)
 
 
 
-# TODO: Use this in all simulations scripts
 @click.command("get_pars_score")
 @click.option('--sim_dir', '-s', help='the folder containing TOI and fasta file.')
 def get_pars_score(sim_dir):
@@ -364,7 +363,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-o", f"{out_dir}/opt_dag_1.pb",
             "-l", f"{log_dir}_1",
             "--move-coeff-nodes", str(2),
-            "--move-coeff-pscore", str(0),
+            "--move-coeff-pscore", str(1),
             "--sample-best-tree"            # NOTE: Might need to change this with different version of larch-usher
             ]
     if refseqfile is not None:
@@ -378,7 +377,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-c", f"{round(int(count)/6)}",
             "-o", f"{out_dir}/opt_dag_2.pb",
             "-l", f"{log_dir}_2",
-            "--move-coeff-nodes", str(2),
+            "--move-coeff-nodes", str(1),
             "--move-coeff-pscore", str(1),
             "--sample-best-tree"
             ]

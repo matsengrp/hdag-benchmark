@@ -44,7 +44,7 @@ optdag_final=$dagdir/final_opt_dag.pb
 
 
 # NOTE this script changes directory to path/to/results/historydag
-python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 1000 -o $dagdir -l $log_prefix
+python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 2000 -o $dagdir -l $log_prefix
 python ../support_pipeline_scripts/cli.py save_supports -m "hdag" -t $ctree -i $optdag_final -o $dagdir/results.pkl
 echo ""
 echo ""
