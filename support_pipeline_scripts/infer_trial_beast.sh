@@ -57,8 +57,8 @@ tree_file=$beastdir/beast-output.trees
 conda activate beast-xml
 xml_file=default.xml
 beast2-xml.py \
---fastaFile $ctreefasta > $xml_file \
---chainLength 100000000 \
+--fastaFile $ctreefasta_with_refseq > $xml_file \
+--chainLength 1000000000 \
 --treeLogEvery 1000
 
 # Run beast
