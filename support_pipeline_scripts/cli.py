@@ -460,7 +460,7 @@ def agg(input, out_dir, clade_name, method, window_proportion=0.20):
     if method == "beast":
         window_size = 100
     else:
-        window_size = int(len(result) * window_proportion)
+        window_size = int(len(results) * window_proportion)
 
     out_path = out_dir + f"/min_max_fig_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
@@ -535,6 +535,7 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
         avg_results_length += len(result)
         x, y = sliding_window_plot(result, window_size=window_size)
         plt.plot(x, y)
+    
     avg_results_length /= int(len(result_dict))
     avg_window_size /= int(len(result_dict))
 
@@ -576,7 +577,7 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
     if method == "beast":
         window_size = 100
     else:
-        window_size = int(len(result) * window_proportion)
+        window_size = int(len(results_full) * window_proportion)
 
     out_path = out_dir + f"/single_line_w={window_size}.png"
     print(f"\tgenerating window plot at {out_path}...")
