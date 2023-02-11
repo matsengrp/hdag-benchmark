@@ -335,6 +335,71 @@ def beast_output(node_set, tree_file):
     return stats_list
 
 
+@click.command("trim_thresholds")
+@click.option('--tree_path', '-t', help='the newick file for the true tree.')
+@click.option('--pb_file', '-i', help='the file containing inference results.')
+@click.option('--output_path', '-o', help='the file to save output to.')
+def trim_thresholds(tree_path, pb_file, output_path):
+    """
+    Given a path to a completed hDAG (e.g., data/A.2.2/1/results/historydag/complete_opt_dag.pb)
+    store results.pkls for various trimming strategies
+    """
+
+    fasta_path = tree_path + ".fasta"
+    taxId2seq = hdag.parsimony.load_fasta(fasta_path)
+    node_set = get_true_nodes(tree_path)
+
+    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
+    dag.make_complete()
+    min_weight = dag.optimal_weight_annotate()
+
+    strat_dict = {}
+
+    strats = ["mp", 1.01, 1.05, 1.1, 1.2, "full"] # Proportion of parsimony to trim to
+    for strat in strats:
+        if strats != "mp":
+            dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
+            dag.make_complete()
+        
+        if strat == "mp":
+            dag.trim_optimal_weight()
+        elif strat == "full":
+            ... # Do no trimming
+        else:
+            max_weight = int(strat * min_weight)
+            dag.trim_below_weight(max_weight=max_weight)
+        
+        trimmed_weights = dag.weight_count()
+        dag.summary()
+
+        counts = dag.count_nodes(collapse=True)
+        total_trees = dag.count_trees()
+
+        seq2taxId = {v: k for k, v in taxId2seq.items()}
+
+        node2stats = {}
+        counter = 0
+        for node in counts:
+            if len(node) == 0:  # UA node
+                continue
+            # Convert cg label to taxon id
+            id_node = frozenset([seq2taxId[label.compact_genome.to_sequence()] for label in node])
+            est_sup = counts[node] / total_trees
+            node2stats[id_node] = (est_sup, id_node in node_set)
+        # Get the support for all nodes in true tree
+        for id_node in node_set:
+            if id_node not in node2stats.keys():
+                node2stats[id_node] = (0, True)
+        stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
+        random.shuffle(stats_list)
+        stats_list.sort(key=lambda el: el[1])
+
+        strat_dict[strat] = (trimmed_weights, stats_list)
+
+    with open(output_path, "wb") as f:
+        pickle.dump(strat_dict, f)
+
+
 
 # TODO: Implement a way to detect if you are slowing down, and then add the sample from any tree option    
 #
@@ -635,6 +700,7 @@ def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200
         return x, y
 
 
+cli.add_command(trim_thresholds)
 cli.add_command(parse_clade_stats)
 cli.add_command(get_pars_score)
 cli.add_command(clade_results)
