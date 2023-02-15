@@ -46,25 +46,25 @@ cd $beastdir
 
 echo "===> Running beast..."
 
-# TODO: Should we be using the fasta with ancestral sequence???
-# TODO: Set beast xml params correctly
-#       - You can use template file that has correct model settings
-#       - What chain length do you want?
 
 tree_file=$beastdir/beast-output.trees
 
-# Create XML file
-conda activate beast-xml
-xml_file=default.xml
-beast2-xml.py \
---fastaFile $ctreefasta_with_refseq > $xml_file \
---chainLength 10000000000 \
---treeLogEvery 1000
+# # Create XML file
+# conda activate beast-xml
+# xml_file=default.xml
+# beast2-xml.py \
+# --fastaFile $ctreefasta_with_refseq > $xml_file \
+# --chainLength 10000000000 \
+# --treeLogEvery 1000
 
-# Run beast
-beast -overwrite $xml_file
+# # Run beast
+# beast -overwrite $xml_file
+
+# Going back to (what should be) the data directory
+cd $currdir
 
 # Extract support from trees
+echo "===> Extracting supports..."
 conda activate hdag-benchmark
 python ../support_pipeline_scripts/cli.py save_supports -m "beast" -t $ctree -i $tree_file -o $beastdir/results.pkl
 echo ""

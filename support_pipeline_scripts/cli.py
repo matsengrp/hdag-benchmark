@@ -338,7 +338,12 @@ def hdag_output(node_set, pb_file, taxId2seq):
 def beast_output(node_set, tree_file,num_trees=1e9):
     """Same as hdag output, but for BEAST."""
 
+    # Precompute number of trees in BEAST run
+    num_lines = sum(1 for line in open(tree_file, "r"))
+    # TODO: Figure out how to compute this on the fly... It will not always be 1 billion trees
+    num_trees = num_lines
     burn_in = int(0.1 * num_trees)
+    print(f"BEAST file has ~{num_trees} trees")
 
     def reroot(new_root):
         """ Edits the tree that the given node, new_root, is a part of so that it becomes the root.
@@ -365,6 +370,11 @@ def beast_output(node_set, tree_file,num_trees=1e9):
 
     node2count = {}
     for i, tree in enumerate(iter_nexus_trees(tree_file)):
+        if i < burn_in:
+            continue
+        if i % num_trees/1000:
+            print("\t", i)
+        
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
 
         node2cu = {}
