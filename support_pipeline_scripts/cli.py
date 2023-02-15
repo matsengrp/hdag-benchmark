@@ -372,7 +372,7 @@ def beast_output(node_set, tree_file,num_trees=1e9):
     for i, tree in enumerate(iter_nexus_trees(tree_file)):
         if i < burn_in:
             continue
-        if i % num_trees/1000:
+        if i % num_trees/1000 == 0:
             print("\t", i)
         
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
