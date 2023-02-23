@@ -27,19 +27,14 @@ for clade in $(cat clades.txt); do
 
     cladedir=data/$clade
 
-    # for trial in $(seq $num_trials); do
-    #     echo "$clade: $trial"
-    #     results=$cladedir/$trial/results/$method/results.pkl
-    #     outdir=$cladedir/$trial/figures/$method
-    #     mkdir -p $outdir
+    for trial in $(seq $num_trials); do
+        echo "$clade: $trial"
+        results=$cladedir/$trial/results/$method/results.pkl
+        outdir=$cladedir/$trial/figures/$method
+        mkdir -p $outdir
 
-    #     # Debugging file paths
-    #     # hdag-benchmark/data/A.2.2/1/results/historydag/results.pkl
-    #     # pwd
-    #     # echo $results
-
-    #     python support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
-    # done
+        python support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
+    done
 
     outdir=$cladedir/figures/$method
     mkdir -p $outdir

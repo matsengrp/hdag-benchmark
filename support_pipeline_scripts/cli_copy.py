@@ -411,15 +411,7 @@ def trim_thresholds(tree_path, pb_file, output_path):
 @click.option('--clade_name', '-c')
 @click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
 def agg_strats(input, out_dir, clade_name, method, window_proportion=0.20):
-    """Given the pickled file, aggregates different strategies for computing support values
-    
-    E.g.
-        python support_pipeline_scripts/cli.py agg_strats \
-        -i /home/whowards/hdag-benchmark/data/A.2.2/1/results/historydag/strat_dict.pkl \
-        -c A.2.2 \
-        -o /home/whowards/hdag-benchmark/data/A.2.2/1/figures/historydag
-
-    """
+    """Given the pickled file, aggregates different strategies for computing support values"""
 
     try:
         with open(input, "rb") as f:
