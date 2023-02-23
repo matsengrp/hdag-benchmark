@@ -335,12 +335,23 @@ def hdag_output(node_set, pb_file, taxId2seq):
 
 #     return stats_list
 
-def beast_output(node_set, tree_file,num_trees=1e9):
-    """Same as hdag output, but for BEAST."""
+def beast_output(node_set, tree_file, num_trees=1e9):
+    """Same as hdag output, but for BEAST.
+    
+    Command to test this on A.2.2/1:
+python support_pipeline_scripts/cli.py save_supports \
+-m "beast" \
+-t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" \
+-i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" \
+-o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results.pkl"
+    
+    """
 
     # Precompute number of trees in BEAST run
-    num_lines = sum(1 for line in open(tree_file, "r"))
-    # TODO: Figure out how to compute this on the fly... It will not always be 1 billion trees
+    print("Counting number of lines...")
+    num_lines = sum(1 for line in open(tree_file, "r")) # TODO: Figure out how to compute this more efficiently
+    print("\tDone!")
+    
     num_trees = num_lines
     burn_in = int(0.1 * num_trees)
     print(f"BEAST file has ~{num_trees} trees")
@@ -370,10 +381,13 @@ def beast_output(node_set, tree_file,num_trees=1e9):
 
     node2count = {}
     for i, tree in enumerate(iter_nexus_trees(tree_file)):
+        if i % int(num_trees / 1000) == 0:
+            print(f"\t{i} / {num_trees}")
+        
         if i < burn_in:
             continue
-        if i % num_trees/1000 == 0:
-            print("\t", i)
+        if i == burn_in:
+            print(f"Finished burn-in. Considering approx {num_trees - burn_in} more trees.")
         
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
 

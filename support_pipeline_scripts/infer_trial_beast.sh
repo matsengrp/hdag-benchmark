@@ -44,11 +44,12 @@ mkdir -p $beastdir
 
 cd $beastdir
 
-echo "===> Running beast..."
 
 
 tree_file=$beastdir/beast-output.trees
 
+# TODO: Need to uncomment this when we do a new beast run
+# echo "===> Running beast..."
 # # Create XML file
 # conda activate beast-xml
 # xml_file=default.xml
@@ -56,7 +57,6 @@ tree_file=$beastdir/beast-output.trees
 # --fastaFile $ctreefasta_with_refseq > $xml_file \
 # --chainLength 10000000000 \
 # --treeLogEvery 1000
-
 # # Run beast
 # beast -overwrite $xml_file
 
