@@ -33,11 +33,6 @@ for clade in $(cat clades.txt); do
     #     outdir=$cladedir/$trial/figures/$method
     #     mkdir -p $outdir
 
-    #     # Debugging file paths
-    #     # hdag-benchmark/data/A.2.2/1/results/historydag/results.pkl
-    #     # pwd
-    #     # echo $results
-
     #     python support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
     # done
 
@@ -45,3 +40,11 @@ for clade in $(cat clades.txt); do
     mkdir -p $outdir
     python support_pipeline_scripts/cli.py clade_results -n $num_trials -c $cladedir -o $outdir -m $method
 done
+
+# python support_pipeline_scripts/cli.py agg \
+# -i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results.pkl" \
+# -o "/home/whowards/hdag-benchmark/data/A.2.2/1/figures/beast" \
+# -c A.2.2 \
+# -w 0.2 \
+# -m beast
+#

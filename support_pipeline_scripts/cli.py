@@ -357,7 +357,8 @@ python support_pipeline_scripts/cli.py save_supports \
     print(f"BEAST file has ~{num_trees} trees")
 
     def reroot(new_root):
-        """ Edits the tree that the given node, new_root, is a part of so that it becomes the root.
+        """
+        Edits the tree that the given node, new_root, is a part of so that it becomes the root.
         Returns pointer to the new root. Also, removes any unifurcations caused by edits.
         """
         node_path = [new_root]
@@ -377,8 +378,13 @@ python support_pipeline_scripts/cli.py save_supports \
             node_path = node_path[:-1]
         if delete_root:
             root.delete()
+
+        # NOTE: Need to delete new root's child because it will be a unifurcation
+        list(curr_child.children)[0].delete()
+
         return curr_child
 
+    total_trees = 0
     node2count = {}
     for i, tree in enumerate(iter_nexus_trees(tree_file)):
         if i % int(num_trees / 1000) == 0:
@@ -386,14 +392,19 @@ python support_pipeline_scripts/cli.py save_supports \
         
         if i < burn_in:
             continue
+
         if i == burn_in:
             print(f"Finished burn-in. Considering approx {num_trees - burn_in} more trees.")
+
+        # TODO: For smaller output debugging
+        # if i > burn_in:
+        #     break
         
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
 
         node2cu = {}
         curr_internal_name = 0
-        for node in tree.traverse("postorder"):
+        for node in rerooted.traverse("postorder"):
             if node.is_leaf():
                 cu = [node.name]
             else:
@@ -408,10 +419,15 @@ python support_pipeline_scripts/cli.py save_supports \
             if cu not in node2count:
                 node2count[cu] = 0
             node2count[cu] += 1
+        total_trees += 1
 
     node2support = {}
     for node, count in node2count.items():
-        node2support[node] = count / total
+        if count > total_trees:
+            print(f"=> Count is {count} with {total_trees} trees")
+            print("Node")
+            print(node)
+        node2support[node] = count / total_trees
 
 
     # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
@@ -659,6 +675,11 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
         toi_node_count = 0
         num_leaves = 0
         for result in results:
+            if result[1] > 1.0:
+                print("node length:", len(node))
+                print("trial:", trial)
+                continue
+
             node = result[0]
             if len(node) > 1:       # Removing leaves
                 results_full.append(result)
@@ -668,6 +689,7 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
                 # Checking that all leaves are in true tree
                 assert result[2]
                 num_leaves += 1
+
         
         # NOTE: Uncomment if you want clade size info about each tree
         # print(f"{clade_name}/{trial} {toi_node_count} non-leaf nodes with {num_leaves} leaves")

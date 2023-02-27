@@ -69,3 +69,5 @@ conda activate hdag-benchmark
 python ../support_pipeline_scripts/cli.py save_supports -m "beast" -t $ctree -i $tree_file -o $beastdir/results.pkl
 echo ""
 echo ""
+
+# python support_pipeline_scripts/cli.py save_supports -m "beast" -t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" -i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" -o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results_temp.pkl"
