@@ -44,29 +44,30 @@ mkdir -p $beastdir
 
 cd $beastdir
 
-echo "===> Running beast..."
 
-# TODO: Should we be using the fasta with ancestral sequence???
-# TODO: Set beast xml params correctly
-#       - You can use template file that has correct model settings
-#       - What chain length do you want?
 
 tree_file=$beastdir/beast-output.trees
 
-# Create XML file
-conda activate beast-xml
-xml_file=default.xml
-beast2-xml.py \
---fastaFile $ctreefasta > $xml_file \
---chainLength 100000000 \
---treeLogEvery 1000
+# TODO: Need to uncomment this when we do a new beast run
+# echo "===> Running beast..."
+# # Create XML file
+# conda activate beast-xml
+# xml_file=default.xml
+# beast2-xml.py \
+# --fastaFile $ctreefasta_with_refseq > $xml_file \
+# --chainLength 10000000000 \
+# --treeLogEvery 1000
+# # Run beast
+# beast -overwrite $xml_file
 
-# Run beast
-beast -overwrite $xml_file
+# Going back to (what should be) the data directory
+cd $currdir
 
 # Extract support from trees
-# TODO: Change this to not have the 2 at the end
+echo "===> Extracting supports..."
 conda activate hdag-benchmark
-python ~/hdag-benchmark/support_pipeline_scripts/cli.py save_supports -m "beast" -t $ctree -i $tree_file -o $beastdir/results.pkl
+python ../support_pipeline_scripts/cli.py save_supports -m "beast" -t $ctree -i $tree_file -o $beastdir/results.pkl
 echo ""
 echo ""
+
+# python support_pipeline_scripts/cli.py save_supports -m "beast" -t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" -i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" -o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results_temp.pkl"

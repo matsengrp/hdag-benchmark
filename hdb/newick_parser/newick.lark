@@ -1,0 +1,113 @@
+// // Beast nexus definitions:
+beast_file : translate_block_wrapper beast_treelist "End;"?
+
+?translate_block_wrapper : translate_block
+
+?translate_block : "Translate" leaf_mapping ";"
+
+leaf_mapping : pair ("," pair)*
+
+pair : integer taxon_name
+
+integer : INT
+
+taxon_name : TAXON_NAME
+TAXON_NAME : /[^ ,\n\r]+/
+
+beast_treelist : beast_tree+ -> list
+
+beast_tree : "tree" beast_name "=" newicktree
+
+beast_name : CNAME -> string
+
+rice_annotation : CNAME -> string
+
+// // Newick tree definitions:
+newicklist : newicktree+    -> list
+
+?newicktree : abstract_node ";"
+
+?abstract_node :  internal_node | leaf_node
+
+internal_node : children nodename? annotations?
+
+leaf_node : nodename? annotations?
+
+children : "(" (abstract_node ",")* abstract_node ")"
+
+nodename : quoted_escaped_string
+         | NODENAME_STRING
+
+NODENAME_STRING : /[^ :\[\](),\;\n\r\0]+/
+
+// // Annotations definitions
+
+annotations : ":" (support extendedannotationlist?
+                   |extendedannotationlist support?)
+            | extendedannotationlist support?
+
+support : number
+
+?extendedannotationlist : extendedannotation+
+?extendedannotation : "[" ["&"+ "NHX"? ":"?] annotationlist "]" ":"?
+
+annotationlist : annotation (":" annotation)* 
+               | annotation ("," annotation)* 
+
+annotation : annotationname "=" data
+
+annotationname : ANAME
+ANAME: ("_"|LETTER) ("_"|"-"|LETTER|DIGIT)*
+
+// lists with separator | may not be nested, but lists with directional
+// delimeters may be, so they're defined separately:
+?data : list | bar_sep_list | standalone_dtype
+
+bar_sep_list : bar_list_dtype ("|" bar_list_dtype)+ -> list
+
+?standalone_dtype : number
+                 | quoted_escaped_string
+                 | STANDALONE_DATA_STRING   -> string
+
+STANDALONE_DATA_STRING : /[^ :,\[\]{}\(\)|]+/
+
+list : "[" list_data ("," list_data)* "]"
+     | "(" list_data ("," list_data)* ")"
+     | "{" list_data ("," list_data)* "}"
+
+?bar_list_dtype : number
+               | quoted_escaped_string
+               | BAR_SEP_STRING         -> string
+BAR_SEP_STRING : /[^,:\[\]|{}]+/
+
+?list_data : list | list_dtype
+
+?list_dtype : number
+            | quoted_escaped_string
+            | LIST_DATA_STRING          -> string
+
+LIST_DATA_STRING : /[^ ,:\(\)\[\]{}]+/
+
+number : SIGNED_INT     -> integer
+       | SIGNED_FLOAT   -> float
+
+quoted_escaped_string : ESCAPED_SINGLE_QUOTE_STRING
+                      | ESCAPED_DOUBLE_QUOTE_STRING
+
+_STRING_INNER: /.*?/
+_STRING_ESC_INNER: _STRING_INNER /(?<!\\)(\\\\)*?/
+
+ESCAPED_DOUBLE_QUOTE_STRING : "\"" _STRING_ESC_INNER "\""
+ESCAPED_SINGLE_QUOTE_STRING : "'" _STRING_ESC_INNER "'"
+
+%import common.CNAME
+%import common.LETTER
+%import common.DIGIT
+%import common.INT
+%import common.SIGNED_INT
+%import common.SIGNED_FLOAT
+%import common.NEWLINE
+%import common.WS
+%import common.WS_INLINE
+%ignore WS
+%ignore WS_INLINE

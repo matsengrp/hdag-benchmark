@@ -11,6 +11,7 @@ import json
 
 import random
 import subprocess
+from hdb.newick_parser.tree_transformer import iter_nexus_trees
 
 import seaborn as sns
 sns.set_theme()
@@ -258,56 +259,175 @@ def hdag_output(node_set, pb_file, taxId2seq):
 
     return stats_list
 
-# TODO: Specify a burn-in parameter???
-def beast_output(node_set, tree_file):
-    """Same as hdag output, but for BEAST."""
+## TODO: Specify a burn-in parameter???
+# def beast_output(node_set, tree_file):
+#     """Same as hdag output, but for BEAST."""
 
-    print("Generating dendropy tree list...")
-    dp_trees = dendropy.TreeList.get(
-            path=tree_file,
-            schema="nexus",
-            extract_comment_metadata=False,
-        )
+#     print("Generating dendropy tree list...")
+#     dp_trees = dendropy.TreeList.get(
+#             path=tree_file,
+#             schema="nexus",
+#             extract_comment_metadata=False,
+#         )
 
-    # TODO: Look into sharding this file because apparently its enormous when loaded into main memory (>14 GB)
-    pickle.dump(dp_trees, open("dp_trees.pkl", "wb"))
-    dp_trees = pickle.load(open("dp_trees.pkl", "rb"))
+#     # TODO: Look into sharding this file because apparently its enormous when loaded into main memory (>14 GB)
+#     pickle.dump(dp_trees, open("dp_trees.pkl", "wb"))
+#     dp_trees = pickle.load(open("dp_trees.pkl", "rb"))
 
-    total = len(dp_trees)
-    print(f"\tCreated tree list with {total} trees")
+#     total = len(dp_trees)
+#     print(f"\tCreated tree list with {total} trees")
 
-    burn_in = int(0.1 * len(dp_trees))
+#     burn_in = int(0.1 * len(dp_trees))
+#     node2count = {}
+#     for i, tree in enumerate(dp_trees[burn_in:]):
+#         node2cu = {}
+#         curr_internal_name = 0
+#         for node in tree.postorder_node_iter():
+#             if node.is_leaf():
+#                 cu = [node.taxon.label]
+#                 node.label = node.taxon.label
+#             else:
+#                 node.label = f"internal{curr_internal_name}"
+#                 curr_internal_name += 1
+#                 cu = []
+#                 for child in node.child_node_iter():
+#                     cu.extend(list(node2cu[child.label]))
+            
+#             cu = frozenset(cu)
+#             node2cu[node.label] = cu
+#             if cu not in node2count:
+#                 node2count[cu] = 0
+#             node2count[cu] += 1
+
+#         # NOTE: For debugging... Delete soon
+#         # if i % 1000 == 0:
+#         #     print(i)
+#         #     print(tree)
+#         #     print(node2count)
+#         #     print(node2cu)
+
+#     node2support = {}
+#     for node, count in node2count.items():
+#         node2support[node] = count / total
+
+
+#     # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
+#     # support and whether that node is in the true tree or not
+#     node2stats = {}
+
+#     # Get the support for all dag nodes
+#     counter = 0
+#     for id_node, est_sup in node2support.items():
+#         if len(id_node) == 0:  # UA node
+#             continue
+
+#         node2stats[id_node] = (est_sup, id_node in node_set)
+    
+#     # Get the support for all nodes in true tree
+#     for id_node in node_set:
+#         if id_node not in node2stats.keys():
+#             node2stats[id_node] = (0, True)
+
+#     print("Considering", len(node2stats), "nodes")
+#     stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
+#     random.shuffle(stats_list)
+#     stats_list.sort(key=lambda el: el[1])
+
+#     return stats_list
+
+def beast_output(node_set, tree_file, num_trees=1e9):
+    """Same as hdag output, but for BEAST.
+    
+    Command to test this on A.2.2/1:
+python support_pipeline_scripts/cli.py save_supports \
+-m "beast" \
+-t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" \
+-i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" \
+-o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results.pkl"
+    
+    """
+
+    # Precompute number of trees in BEAST run
+    print("Counting number of lines...")
+    num_lines = sum(1 for line in open(tree_file, "r")) # TODO: Figure out how to compute this more efficiently
+    print("\tDone!")
+    
+    num_trees = num_lines
+    burn_in = int(0.1 * num_trees)
+    print(f"BEAST file has ~{num_trees} trees")
+
+    def reroot(new_root):
+        """
+        Edits the tree that the given node, new_root, is a part of so that it becomes the root.
+        Returns pointer to the new root. Also, removes any unifurcations caused by edits.
+        """
+        node_path = [new_root]
+        curr = new_root
+        while not curr.is_root():
+            node_path.append(curr.up)
+            curr = curr.up
+
+        root = node_path[-1]
+        delete_root = len(root.children) <= 2
+        
+        while len(node_path) >= 2:
+            curr_node = node_path[-1]
+            curr_child = node_path[-2]
+            curr_child.detach()
+            curr_child.add_child(curr_node)
+            node_path = node_path[:-1]
+        if delete_root:
+            root.delete()
+
+        # NOTE: Need to delete new root's child because it will be a unifurcation
+        list(curr_child.children)[0].delete()
+
+        return curr_child
+
+    total_trees = 0
     node2count = {}
-    for i, tree in enumerate(dp_trees[burn_in:]):
+    for i, tree in enumerate(iter_nexus_trees(tree_file)):
+        if i % int(num_trees / 1000) == 0:
+            print(f"\t{i} / {num_trees}")
+        
+        if i < burn_in:
+            continue
+
+        if i == burn_in:
+            print(f"Finished burn-in. Considering approx {num_trees - burn_in} more trees.")
+
+        # TODO: For smaller output debugging
+        # if i > burn_in:
+        #     break
+        
+        rerooted = reroot(tree.search_nodes(name="ancestral")[0])
+
         node2cu = {}
         curr_internal_name = 0
-        for node in tree.postorder_node_iter():
+        for node in rerooted.traverse("postorder"):
             if node.is_leaf():
-                cu = [node.taxon.label]
-                node.label = node.taxon.label
+                cu = [node.name]
             else:
-                node.label = f"internal{curr_internal_name}"
+                node.name = f"internal{curr_internal_name}"
                 curr_internal_name += 1
                 cu = []
-                for child in node.child_node_iter():
-                    cu.extend(list(node2cu[child.label]))
+                for child in node.children:
+                    cu.extend(list(node2cu[child.name]))
             
             cu = frozenset(cu)
-            node2cu[node.label] = cu
+            node2cu[node.name] = cu
             if cu not in node2count:
                 node2count[cu] = 0
             node2count[cu] += 1
-
-        # NOTE: For debugging... Delete soon
-        # if i % 1000 == 0:
-        #     print(i)
-        #     print(tree)
-        #     print(node2count)
-        #     print(node2cu)
+        total_trees += 1
 
     node2support = {}
     for node, count in node2count.items():
-        node2support[node] = count / total
+        if count > total_trees:
+            print(f"=> Count is {count} with {total_trees} trees")
+            print("Node")
+            print(node)
+        node2support[node] = count / total_trees
 
 
     # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
@@ -555,6 +675,11 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
         toi_node_count = 0
         num_leaves = 0
         for result in results:
+            if result[1] > 1.0:
+                print("node length:", len(node))
+                print("trial:", trial)
+                continue
+
             node = result[0]
             if len(node) > 1:       # Removing leaves
                 results_full.append(result)
@@ -564,6 +689,7 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
                 # Checking that all leaves are in true tree
                 assert result[2]
                 num_leaves += 1
+
         
         # NOTE: Uncomment if you want clade size info about each tree
         # print(f"{clade_name}/{trial} {toi_node_count} non-leaf nodes with {num_leaves} leaves")
