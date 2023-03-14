@@ -27,6 +27,7 @@ for clade in $(cat clades.txt); do
 
     cladedir=data/$clade
 
+<<<<<<< HEAD
     for trial in $(seq $num_trials); do
         echo "$clade: $trial"
         results=$cladedir/$trial/results/$method/results.pkl
@@ -35,8 +36,26 @@ for clade in $(cat clades.txt); do
 
         python support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
     done
+=======
+    # for trial in $(seq $num_trials); do
+    #     echo "$clade: $trial"
+    #     results=$cladedir/$trial/results/$method/results.pkl
+    #     outdir=$cladedir/$trial/figures/$method
+    #     mkdir -p $outdir
+
+    #     python support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
+    # done
+>>>>>>> origin/main
 
     outdir=$cladedir/figures/$method
     mkdir -p $outdir
     python support_pipeline_scripts/cli.py clade_results -n $num_trials -c $cladedir -o $outdir -m $method
 done
+
+# python support_pipeline_scripts/cli.py agg \
+# -i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results.pkl" \
+# -o "/home/whowards/hdag-benchmark/data/A.2.2/1/figures/beast" \
+# -c A.2.2 \
+# -w 0.2 \
+# -m beast
+#

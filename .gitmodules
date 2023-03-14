@@ -1,0 +1,3 @@
+[submodule "newick-parser"]
+	path = newick-parser
+	url = https://github.com/willdumm/newick-parser.git
