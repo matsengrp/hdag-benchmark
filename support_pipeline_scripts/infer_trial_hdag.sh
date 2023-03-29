@@ -33,7 +33,7 @@ seedtree=$dagdir/seedtree.pb
 mkdir -p $dagdir/opt_info
 # cd $dagdir/opt_info
 
-# TODO: Uncomment this ---v
+# TODO: Uncomment this when you want to search for new trees ---v
 # echo "===> create tree with UShER..."
 # # $ctreevcf contains the ancestral sequence and all the other simulated sequences
 # usher-sampled -v $ctreevcf -t $starttree -o $seedtree  --optimization_minutes=0 -d $dagdir/opt_info
@@ -43,8 +43,14 @@ echo "===> lusher optimizing..."
 log_prefix=$dagdir/opt_info/optimization_log
 optdag_final=$dagdir/final_opt_dag.pb
 
-python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 2000 -o $dagdir -l $log_prefix
-python ../support_pipeline_scripts/cli.py save_supports -m "hdag" -t $ctree -i $optdag_final -o $dagdir/results.pkl
+# NOTE: Traditional DAG inference with optimizing DAG for MP trees.
+# python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 2000 -o $dagdir -l $log_prefix
+# python ../support_pipeline_scripts/cli.py save_supports -m "hdag" -t $ctree -i $optdag_final -o $dagdir/results.pkl
+
+# NOTE: Tests different trimming strategies for uniform node support.
 # python ../support_pipeline_scripts/cli.py trim_thresholds -t $ctree -i $optdag_final -o $dagdir/strat_dict.pkl
+
+# NOTE: Tests different weighting schemes for generalized node support.
+python ../support_pipeline_scripts/cli.py test_pars_weights -t $ctree -i $optdag_final -o $dagdir/strat_dict_node_weight.pkl
 echo ""
 echo ""

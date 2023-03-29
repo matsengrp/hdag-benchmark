@@ -7,7 +7,7 @@
 # Paramaters that determine how many trees to simulate for each clade
 num_res=10
 num_sim=10
-method="beast"
+method="hdag"
 let "num_trials = $num_sim * $num_res"
 
 echo ""
@@ -36,11 +36,7 @@ for clade in $(cat ../clades.txt); do
 
         mkdir -p $clade/$trial/results
         
-<<<<<<< HEAD
         sbatch -c 1 -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
-=======
-        sbatch -c 2 -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
->>>>>>> origin/main
         ./../support_pipeline_scripts/infer_trial_$method.sh $PWD $clade $trial
     done
 done
