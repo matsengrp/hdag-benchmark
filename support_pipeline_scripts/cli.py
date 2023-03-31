@@ -16,6 +16,8 @@ from historydag import parsimony_utils
 
 from math import exp
 
+from collections import Counter
+
 import seaborn as sns
 sns.set_theme()
 # plt.rcParams['text.usetex'] = True
@@ -59,6 +61,10 @@ def get_pars_score(sim_dir):
     """
     Computes the parsimony score of the simulated tree, the maximum possible parsimony given the
     topology, and the maximum parsimony on the leaves. Stores results as a json at sim_dir/tree_stats.json
+
+    Also computes statistics for the subsetted USHER tree. This can be useful for ensuring that
+    the simulations roughly match the real data. This script assumes the directory `sim_dir/..`
+    contains the USHER-subsetted newick tree tree.n.nwk.
     """
 
     var_sites_prefix = sim_dir + "/collapsed_simulated_tree.nwk.variant_sites"
@@ -99,6 +105,11 @@ def get_pars_score(sim_dir):
     from historydag.parsimony import parsimony_score, sankoff_upward
     tree_path = sim_dir + "/collapsed_simulated_tree.nwk"
     tree = ete.Tree(tree_path) # Doesn't have internal names
+
+    multifurc_counts = Counter()
+    for node in tree.traverse():
+        if not node.is_leaf():
+            multifurc_counts[len(node.children)] += 1
 
     fasta_path = sim_dir + "/ctree_with_refseq.fasta"   # ancestral seq in second line of this file
     with open(fasta_path, "r") as f:
@@ -147,12 +158,51 @@ def get_pars_score(sim_dir):
         "num_nodes": num_nodes,
         "pars_score": tree_score,
         "max_score_top": max_score,
-        "max_score_data": best_possible
+        "max_score_data": best_possible,
+        "multifurc_distribution": multifurc_counts
     }
+
+    # Add similar states from the USHER tree
+
+    usher_tree_path = sim_dir.split("/")[0] + "/tree.n.nwk"
+    print("usher tree path:", usher_tree_path)
+    usher_tree = ete.Tree(usher_tree_path, format=1)
+    # Remove multifurcations
+    to_delete = []
+    for node in usher_tree.traverse():
+        # TODO: Add leaf check elsewhere as needed
+        if not node.is_root() and node.dist==0:
+            to_delete.append(node)
+    for node in to_delete:
+        node.delete(prevent_nondicotomic=False)
+    # Remove unifurcations
+    to_delete = [node for node in usher_tree.traverse() if len(node.children) == 1 and not node.is_root()]
+    for node in to_delete:
+        node.delete(prevent_nondicotomic=False)
+
+    pars = 0
+    multifurc_counts = Counter()
+    node_count = 0
+    leaf_count = 0
+    for node in usher_tree.traverse():
+        node_count += 1
+        if node.is_leaf():
+            leaf_count += 1
+        if not node.is_root():
+            pars += node.dist
+        if not node.is_leaf():
+            multifurc_counts[len(node.children)] += 1
+    
+    stats_dict["usher_num_leaves"] = leaf_count
+    stats_dict["usher_num_nodes"] = node_count
+    stats_dict["usher_pars_score"] = pars
+    stats_dict["usher_multifurc_distribution"] = multifurc_counts
+
+
 
     outfile = sim_dir + "/tree_stats.json"
     with open(outfile, "w") as f:
-        f.write(json.dumps(stats_dict))
+        f.write(json.dumps(stats_dict, indent=4))
 
 
 
