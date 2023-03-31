@@ -2,6 +2,7 @@
 
 set -eu
 eval "$(conda shell.bash hook)"
+
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 # NOTE: This file must have executable permissions to be used with simulation pipeline
@@ -13,6 +14,12 @@ sim=$3
 simdir=$4
 rtree=$5
 
+echo $1
+echo $2
+echo $3
+echo $4
+echo $5
+
 # NOTE: Should always be data directory
 cd $curr_dir
 
@@ -20,10 +27,12 @@ cd $curr_dir
 for seed in $(seq 50); do
     # Seed is also printed to sim.log
     let "s = $seed + ($sim-1) * 10 + ($rseed-1) * 100"
-    echo "seed $s"
+
+    # NOTE: --scale=0.0000345 with branch lengths being number of mutations approximates
+    # the JC model branch lengths very well for short branch lengths.
     phastSim --outpath $simdir/ --seed $s --createFasta --createInfo \
             --createNewick --createPhylip --treeFile $rtree \
-            --scale 0.00004 --invariable 0.1 --alpha 1.0 --omegaAlpha 1.0 \
+            --scale 0.0000345 --invariable 0.1 --alpha 1.0 --omegaAlpha 1.0 \
             --hyperMutProbs 0.01 0.01 --hyperMutRates 20.0 200.0 --codon \
             --reference refseq.fasta --eteFormat 1
     simtree=$simdir/sars-cov-2_simulation_output.tree
@@ -33,12 +42,13 @@ for seed in $(seq 50); do
     ctreefasta=${ctree}.fasta
     ctreefasta_with_refseq=$simdir/ctree_with_refseq.fasta  # Stores leaf sequences
 
-    # You made a bunch of new nodes when resolving so your tree.mapping
+    # NOTE: You made a bunch of new nodes when resolving so your tree.mapping
     # is not completely correct any more
     
     # produces ctreefasta_with_refseq which doesn't contain reference sequence
     # throws error message if tree exhibits convergent evolution
     if hdb collapse-tree $simtree $simfasta $ctree; then
+        echo "seed $s"
         break
     fi
 done

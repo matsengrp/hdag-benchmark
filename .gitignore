@@ -9,3 +9,5 @@ temp.txt
 notes.txt
 *.fasta
 *.csv
+MAPLEv0.2.1.py
+createMapleFile.py
