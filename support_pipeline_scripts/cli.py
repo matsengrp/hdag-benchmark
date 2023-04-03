@@ -11,12 +11,13 @@ import json
 
 import random
 import subprocess
-from hdb.newick_parser.tree_transformer import iter_nexus_trees
+from math import exp
+from collections import Counter
+
+# TODO: Uncomment this later
+# from hdb.newick_parser.tree_transformer import iter_nexus_trees
 from historydag import parsimony_utils
 
-from math import exp
-
-from collections import Counter
 
 import seaborn as sns
 sns.set_theme()
@@ -865,6 +866,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
     # subprocess.run(["cd", out_dir]) # One process can't change anothers working dir
 
     if int(count) <= 2:
+        raise Exception("Not enough iterations")
         return
 
     print("\n\tCurrent directory in python:", out_dir)
@@ -878,9 +880,9 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-c", f"{round(int(count)/2)}",
             "-o", f"{out_dir}/opt_dag_1.pb",
             "-l", f"{log_dir}_1",
-            "--move-coeff-nodes", str(2),
-            "--move-coeff-pscore", str(1),
-            "--sample-best-tree"            # NOTE: Might need to change this with different version of larch-usher
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(0),
+            # "--sample-best-tree"            # NOTE: Might need to change this with different version of larch-usher
             ]
     if refseqfile is not None:
         args.extend(["-r", refseqfile])

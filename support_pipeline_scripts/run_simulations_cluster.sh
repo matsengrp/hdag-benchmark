@@ -2,15 +2,15 @@
 
 # Simulates SARS-CoV-2 data with the following procedure
 #   1. Subset the big UShER generated MAT for a tree topology
-#   1.5 (IN PROGRESS) Compute branch lengths according to JC model
 #   2. Randomly resolve all multifurcations
-#   2.5 (IP) Give added edges relatively small branch lengths
+#   2.5 Give added edges relatively small branch lengths
 #   3. Use PhastSim to simulate internal node sequences all the way out to leaf nodes
-#   4. Store leaf sequences, ancestral sequence, and simulated tree
+#   4. Collapse tree so that all edges have at least one mutation
+#   5. Store leaf sequences, ancestral sequence, and simulated tree
 
 # Paramaters that determine how many trees to simulate for each clade
-num_res=2
-num_sim=2
+num_res=10
+num_sim=10
 
 echo ""
 echo "=> Simulating trees..."

@@ -148,6 +148,7 @@ def resolve_polytomy(tree, seed, branch_len_model):
     """
 
     # Controls how much multifurcation in simulation
+    # TODO: Trying smaller values here (was 0.01)
     resolved_multifurc_len = 0.01
 
     with open("refseq.fasta", "r") as f:
