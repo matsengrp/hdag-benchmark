@@ -149,7 +149,7 @@ def resolve_polytomy(tree, seed, branch_len_model):
 
     # Controls how much multifurcation in simulation
     # TODO: Trying smaller values here (was 0.01)
-    resolved_multifurc_len = 0.01
+    resolved_multifurc_len = 0.001
 
     with open("refseq.fasta", "r") as f:
         f.readline()
@@ -173,14 +173,14 @@ def resolve_polytomy(tree, seed, branch_len_model):
             while len(node_list) > 2:
                 # Randomly sample a pair of nodes
                 pair = random.sample(range(0, len(node_list)-1), 2)
-                # pair.sort() # TODO: Why are we doing this?
+                pair.sort() # TODO: Why are we doing this?
                 
                 # Create new node and make branch length
                 par = ete3.Tree()
 
                 if branch_len_model == "jc":
                     adj_dist = resolved_multifurc_len
-                    par.dist = jc_dist(adj_dist)
+                    par.dist = jc_dist(resolved_multifurc_len)
                 elif branch_len_model == "num-muts":
                     adj_dist = resolved_multifurc_len
                     par.dist = adj_dist
@@ -198,7 +198,9 @@ def resolve_polytomy(tree, seed, branch_len_model):
             node.add_child(node_list[1])
 
     target = [tree]
-    target.extend([n for n in tree.traverse("postorder")])
+    # TODO: Should we use get_descendants instead of postorder??
+    # target.extend([n for n in tree.traverse("postorder")])
+    target.extend([n for n in tree.get_descendants()])
     for n in target:
         # Compute branch lengths for edge above node if not a parent node
         if not n.is_root():

@@ -17,7 +17,7 @@ from collections import Counter
 # TODO: Uncomment this later
 # from hdb.newick_parser.tree_transformer import iter_nexus_trees
 from historydag import parsimony_utils
-
+from historydag.parsimony import parsimony_score, sankoff_upward
 
 import seaborn as sns
 sns.set_theme()
@@ -89,6 +89,7 @@ def get_pars_score(sim_dir):
             f.write(f"{line}")
 
     # This ouputs to simdir/dnapars_output.txt
+    # TODO: Remove this for clade A
     subprocess.run([
         "dnapars_parsimony_score.sh",
         var_sites_prefix + "_with_refseq.fasta",    # infasta
@@ -102,8 +103,6 @@ def get_pars_score(sim_dir):
         best_possible = float(temp[-1])
 
 
-
-    from historydag.parsimony import parsimony_score, sankoff_upward
     tree_path = sim_dir + "/collapsed_simulated_tree.nwk"
     tree = ete.Tree(tree_path) # Doesn't have internal names
 
@@ -871,18 +870,26 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
 
     print("\n\tCurrent directory in python:", out_dir)
 
+    """
+    # Test command
+    cd /fh/fast/matsen_e/whowards/hdag-benchmark/data/A/1/results/historydag;
+    /home/whowards/larch/larch/build/larch-usher -i seedtree.pb -r refseq.txt -c 20 -o ../historydag \
+    --move-coeff-nodes 1 \
+    --move-coeff-pscore 0 \
+    -l optimization_log_1
+    """
 
     # Cast a wide net by prioritizing new nodes only
     print("Running initial iterations of larch-usher...")
     subprocess.run(["mkdir", "-p", f"{log_dir}_1"])
     args = [executable,
-            "-i", input,
+            "-i", f"{input}",
             "-c", f"{round(int(count)/2)}",
             "-o", f"{out_dir}/opt_dag_1.pb",
             "-l", f"{log_dir}_1",
             "--move-coeff-nodes", str(1),
             "--move-coeff-pscore", str(0),
-            # "--sample-best-tree"            # NOTE: Might need to change this with different version of larch-usher
+            "--sample-any-tree"
             ]
     if refseqfile is not None:
         args.extend(["-r", refseqfile])
@@ -897,7 +904,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-l", f"{log_dir}_2",
             "--move-coeff-nodes", str(1),
             "--move-coeff-pscore", str(1),
-            "--sample-best-tree"
+            # "--sample-best-tree"
             ]
     subprocess.run(args=args)
 
@@ -910,7 +917,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir
             "-l", f"{log_dir}_3",
             "--move-coeff-nodes", str(1),
             "--move-coeff-pscore", str(3),
-            # "--sample-any-tree"
+            "--sample-any-tree"
             ]
     subprocess.run(args=args)
 
