@@ -4,6 +4,7 @@ import ete3 as ete
 import random
 import pickle
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
 import os
 import dendropy
@@ -12,6 +13,8 @@ import json
 import random
 import subprocess
 from math import exp
+import math
+import time
 from collections import Counter
 
 # TODO: Uncomment this later
@@ -55,7 +58,7 @@ def parse_clade_stats(in_file):
                 print(name, "\t", leaf_count)
 
 
-
+# TODO: Rename to get_tree_stats or something
 @click.command("get_pars_score")
 @click.option('--sim_dir', '-s', help='the folder containing TOI and fasta file.')
 def get_pars_score(sim_dir):
@@ -88,20 +91,19 @@ def get_pars_score(sim_dir):
         for line in var_sites:
             f.write(f"{line}")
 
-    # This ouputs to simdir/dnapars_output.txt
-    # TODO: Remove this for clade A
-    subprocess.run([
-        "dnapars_parsimony_score.sh",
-        var_sites_prefix + "_with_refseq.fasta",    # infasta
-        name,                                       # root_name
-        sim_dir                                     # out_dir
-    ])
+    # TODO: Removed for large clades
+    # subprocess.run([
+    #     "dnapars_parsimony_score.sh",
+    #     var_sites_prefix + "_with_refseq.fasta",    # infasta
+    #     name,                                       # root_name
+    #     sim_dir                                     # out_dir
+    # ])
 
-    with open(sim_dir + "/dnapars_output.txt", "r") as f:
-        line = f.readline()
-        temp = line.strip().split(" ")
-        best_possible = float(temp[-1])
-
+    # with open(sim_dir + "/dnapars_output.txt", "r") as f:
+    #     line = f.readline()
+    #     temp = line.strip().split(" ")
+    #     best_possible = float(temp[-1])
+    best_possible = -1
 
     tree_path = sim_dir + "/collapsed_simulated_tree.nwk"
     tree = ete.Tree(tree_path) # Doesn't have internal names
@@ -276,7 +278,7 @@ def get_true_nodes(tree_path):
     return set([v for k, v in etenode2cu.items()])
 
 
-def hdag_output_general(node_set, pb_file, taxId2seq, pars_weight="inf"):
+def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf"):
     """
     Uses a generalized node support that considers non-MP trees and weights them as a functions
     of their parsiomny score.
@@ -286,31 +288,47 @@ def hdag_output_general(node_set, pb_file, taxId2seq, pars_weight="inf"):
 
     Args:
         node_set: Set of nodes (sets of taxa ids) that are in the true tree.
-        pb_file: Protobuf file that contains the optimized DAG.
+        inp: Otimized DAG or a protobuf file to the optimized DAG. WARNING: dag input will be mutated.
         taxId2Seq: Dicitonary of taxon IDs to the sequences they represent
         pars_weight: Constant to multiply by in the pscore_fn. If `inf`, then use uniform
             distribution over MP trees. Otherwise, support for edge (n1, n2) is computed as
             exp(-<pars_weight> * <pars(n1, n2)>)
     """
 
-    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
+    print("Parsiomny score weight:", pars_weight, "\n")
 
-    # TODO: Try creating plots without these
-    # dag.make_complete()
+    if isinstance(inp, str):
+        print("Loading MAD...")
+        start = time.time()
+        dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(inp)
+        print(f"\t Took {(time.time() - start)/60} minutes")
+    else:
+        dag = inp
+
+    print("Completing and Collapsing DAG...")
+    start = time.time()
+    dag.make_complete()
+    print(f"\t Took {(time.time() - start)/60} minutes")
+
+    start = time.time()
     dag.convert_to_collapsed()
+    print(f"\t Took {(time.time() - start)/60} minutes")
+
 
     if pars_weight == "inf":
         # This recovers uniform distribution over MP trees
         dag.trim_optimal_weight()
         pscore_fn = lambda n1, n2: 0
     else:
-        pscore_fn = lambda n1, n2: pars_weight #-pars_weight * parsimony_utils.hamming_cg_edge_weight(n1, n2)
+        pscore_fn = lambda n1, n2: -pars_weight * parsimony_utils.hamming_cg_edge_weight(n1, n2)
 
     print("\n\tDAG contains", dag.count_trees(), "trees\n")
-        
+
+    print("Annotating supports...")
+    start = time.time()
     dag.probability_annotate(lambda n1, n2: pscore_fn(n1, n2), log_probabilities=True)
     support = dag.node_probabilities(log_probabilities=True, collapse_key=lambda n: n.clade_union())
-
+    print(f"\t Took {(time.time() - start)/60} minutes")
 
     seq2taxId = {v: k for k, v in taxId2seq.items()}
 
@@ -350,14 +368,15 @@ def hdag_output(node_set, pb_file, taxId2seq):
     """
     dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
     dag.make_complete()
+    dag.convert_to_collapsed()
     dag.trim_optimal_weight() # Trim to the MP trees
-    counts = dag.count_nodes(collapse=True) # TODO: double check that this is counting the right thing
+    counts = dag.count_nodes(collapse=True)
     total_trees = dag.count_trees()
     
-
-    print("size of counts is:", len(counts))
-    print(f"There are {len(node_set)} nodes in TOI")
-    dag.summary()
+    # TODO: Is this taking a long time??
+    # print("size of counts is:", len(counts))
+    # print(f"There are {len(node_set)} nodes in TOI")
+    # dag.summary()
 
     seq2taxId = {v: k for k, v in taxId2seq.items()}
 
@@ -394,11 +413,11 @@ def beast_output(node_set, tree_file, num_trees=1e9):
     """Same as hdag output, but for BEAST.
     
     Command to test this on A.2.2/1:
-python support_pipeline_scripts/cli.py save_supports \
--m "beast" \
--t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" \
--i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" \
--o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results.pkl"
+        python support_pipeline_scripts/cli.py save_supports \
+        -m "beast" \
+        -t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" \
+        -i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" \
+        -o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results.pkl"
     
     """
 
@@ -589,12 +608,20 @@ def test_pars_weights(tree_path, pb_file, output_path):
     store results.pkls for various parsiomny weightings
     """
 
+    # TODO: Could one of these be what's so slow??
     fasta_path = tree_path + ".fasta"
     taxId2seq = hdag.parsimony.load_fasta(fasta_path)
     node_set = get_true_nodes(tree_path)
 
     weight_dict = {}
-    pweight = [0, 1, 2, 3, 4, 10, 1e2, 1e3, 1e5, 1e10, "inf"] # Proportion of parsimony to trim to
+    pweight = [0, 0.1, 0.5, 1, 2, 4, "inf"] # Proportion of parsimony to trim to
+
+    # print("Loading MAD...")
+    # start = time.time()
+    # dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
+    # print(f"\t Took {(time.time() - start)/60} minutes")
+    # TODO: ^ Can we save having to load this thing multiple times
+
     for p in pweight:
         stats_list = hdag_output_general(node_set, pb_file, taxId2seq, pars_weight=p)
         weight_dict[p] = (p, stats_list)
@@ -602,6 +629,120 @@ def test_pars_weights(tree_path, pb_file, output_path):
     with open(output_path, "wb") as f:
         pickle.dump(weight_dict, f)
 
+
+# TODO: Implement a way to detect if you are slowing down, and then add the sample from any tree option
+@click.command("larch_usher")
+@click.option('--executable', '-e', default='/home/whowards/larch/larch/build/larch-usher', help='path to pre-made larch-usher executable')
+@click.option('--input', '-i', help='input tree or hdag. if tree, need refseqfile.')
+@click.option('--refseqfile', '-r', default=None, help='number of .')
+@click.option('--count', '-c', help='number of iterations.')
+@click.option('--out_dir', '-o', help='the directory for where to store resulting dag protobufs.')
+@click.option('--schedule', '-s', default="annealed")
+@click.option('--log_dir', '-l')
+@click.option('--pars_score', '-p', default=1)
+@click.option('--node_score', '-n', default=1)
+def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir, pars_score, node_score):
+    """Python CLI for driving larch-usher
+    
+    E.g.,
+        larch_usher \
+        -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/results/historydag/opt_dag_3.pb \
+        -c 2000 \
+        -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/results/historydag \
+        -l /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/results/historydag/opt_info
+    """
+
+    # E.g., results/historydag/
+    os.chdir(f"{out_dir}")
+    # subprocess.run(["cd", out_dir]) # One process can't change anothers working dir
+
+    if int(count) <= 2:
+        raise Exception("Not enough iterations")
+        return
+
+    # TODO: Uncomment this... just fixing a CLI argument (sample-any-tree)
+    # print("\n\tCurrent directory in python:", out_dir)
+
+    """
+    # Test command
+    cd /fh/fast/matsen_e/whowards/hdag-benchmark/data/A/1/results/historydag;
+    /home/whowards/larch/larch/build/larch-usher -i complete_opt_dag.pb -c 20 -o ../historydag \
+    --move-coeff-nodes 1 \
+    --move-coeff-pscore 3 \
+    -l optimization_log_complete
+    """
+
+    # Cast a wide net by prioritizing new nodes only
+    print("Running initial iterations of larch-usher...")
+    subprocess.run(["mkdir", "-p", f"{log_dir}_1"])
+    args = [executable,
+            "-i", f"{input}",
+            "-c", f"{round(int(count)/2)}",
+            "-o", f"{out_dir}/opt_dag_1.pb",
+            "-l", f"{log_dir}_1",
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(0),
+            "--sample-any-tree"
+            ]
+    if refseqfile is not None:
+        args.extend(["-r", refseqfile])
+    subprocess.run(args=args)
+
+    # Start considering parsimonious moves
+    subprocess.run(["mkdir", "-p", f"{log_dir}_2"])
+    args = [executable,
+            "-i", f"{out_dir}/opt_dag_1.pb",
+            "-c", f"{round(int(count)/6)}",
+            "-o", f"{out_dir}/opt_dag_2.pb",
+            "-l", f"{log_dir}_2",
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(1),
+            # "--sample-best-tree"
+            ]
+    subprocess.run(args=args)
+
+    # Emphasize parsimony over new nodes
+    subprocess.run(["mkdir", "-p", f"{log_dir}_3"])
+    args = [executable,
+            "-i", f"{out_dir}/opt_dag_2.pb",
+            "-c", f"{round(int(count)/6)}",
+            "-o", f"{out_dir}/opt_dag_3.pb",
+            "-l", f"{log_dir}_3",
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(3),
+            "--sample-any-tree"
+            ]
+    subprocess.run(args=args)
+
+    print("Completing DAG...")
+    start = time.time()
+    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(f"{out_dir}/opt_dag_3.pb")
+    dag.convert_to_collapsed()
+    dag.make_complete()
+    dag.to_protobuf_file(f"{out_dir}/complete_opt_dag.pb")
+    end = time.time()
+    print(f"\tCompletion took {(end - start) / 60} minutes")
+
+    subprocess.run(["mkdir", "-p", f"{log_dir}_complete"])
+    args = [executable,
+            "-i", f"{out_dir}/complete_opt_dag.pb",
+            "-c", f"{round(int(count)/6)}",
+            "-o", f"{out_dir}/final_opt_dag.pb",
+            "-l", f"{log_dir}_complete",
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(3)
+            ]
+    subprocess.run(args=args)
+
+
+    # TODO: Add --sample-any again?
+
+
+
+# TODO: Put these functions in their own file
+###################################################################################################
+#### Plotting #####################################################################################
+###################################################################################################
 
 @click.command("agg_pars_weights")
 @click.option('--input', '-i', help='file path to input list as a pickle.')
@@ -657,7 +798,6 @@ def agg_pars_weights(input, out_dir, clade_name, method, window_proportion=0.20)
 
         window_size = int(len(results) * window_proportion)
 
-        # TODO: Change this to be for complete and complete_collapsed...
         out_path = out_dir + f"/pars_weight_w={window_size}_complete.png"
         x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
@@ -690,10 +830,10 @@ def bin_pars_weights(input, out_dir, clade_name, method, bin_size):
     for computing support values USING A HISTOGRAM BINNING STRATEGY (AS OPPOSED TO SLIDING WINDOW)
     
     E.g.:
-python support_pipeline_scripts/cli.py bin_pars_weights \
--i /home/whowards/hdag-benchmark/data/A.2.2/1/results/historydag/strat_dict_pars_weight.pkl \
--c A.2.2 \
--o /home/whowards/hdag-benchmark/data/A.2.2/1/figures/historydag
+    python support_pipeline_scripts/cli.py bin_pars_weights \
+    -i /home/whowards/hdag-benchmark/data/A.2.2/1/results/historydag/strat_dict_pars_weight.pkl \
+    -c A.2.2 \
+    -o /home/whowards/hdag-benchmark/data/A.2.2/1/figures/historydag
     """
 
     try:
@@ -813,11 +953,6 @@ def agg_strats(input, out_dir, clade_name, method, window_proportion=0.20):
         out_path = out_dir + f"/support_quartiles_w={window_size}_strat={strat}.png"
         x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
-        # print("est\ttrue\tQ1\tQ3")
-        # for num, (i, j, k, l) in enumerate(zip(x, y, min_sup, max_sup)):
-        #     print(f"{num}\t{i:3f}\t{j:3f}\t{k:3f}\t{l:3f}")
-        # print(window_size)
-
         f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
         f.set_size_inches(7, 10)
 
@@ -845,108 +980,48 @@ def agg_strats(input, out_dir, clade_name, method, window_proportion=0.20):
         plt.savefig(out_dir + f"/parsiomny_distribution_for_{strat}.png")
 
 
-
-# TODO: Implement a way to detect if you are slowing down, and then add the sample from any tree option
-@click.command("larch_usher")
-@click.option('--executable', '-e', default='/home/whowards/larch/larch/build/larch-usher', help='path to pre-made larch-usher executable')
-@click.option('--input', '-i', help='input tree or hdag. if tree, need refseqfile.')
-@click.option('--refseqfile', '-r', default=None, help='number of .')
-@click.option('--count', '-c', help='number of iterations.')
-@click.option('--out_dir', '-o', help='the directory for where to store resulting dag protobufs.')
-@click.option('--schedule', '-s', default="annealed")
-@click.option('--log_dir', '-l')
-@click.option('--pars_score', '-p', default=1)
-@click.option('--node_score', '-n', default=1)
-def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir, pars_score, node_score):
-    """Python CLI for driving larch-usher"""
-
-    # E.g., results/historydag/
-    os.chdir(f"{out_dir}")
-    # subprocess.run(["cd", out_dir]) # One process can't change anothers working dir
-
-    if int(count) <= 2:
-        raise Exception("Not enough iterations")
-        return
-
-    print("\n\tCurrent directory in python:", out_dir)
-
+@click.command("cumm_pars_weight")
+@click.option('--input', '-i', help="path to input MADAG")
+@click.option('--out_dir', '-o', help="directory path to output plot to")
+@click.option('--parsimony_weight', '-p', default=0.01, help="the coefficient to multiple parsiomny by in the negative exponential")
+def cumm_pars_weight(input, out_dir, parsimony_weight):
     """
-    # Test command
-    cd /fh/fast/matsen_e/whowards/hdag-benchmark/data/A/1/results/historydag;
-    /home/whowards/larch/larch/build/larch-usher -i seedtree.pb -r refseq.txt -c 20 -o ../historydag \
-    --move-coeff-nodes 1 \
-    --move-coeff-pscore 0 \
-    -l optimization_log_1
+    Plots the cummulative distribution of tree probability as a function of parsiomny score
+    for various parsimony weightings.
+
+    Roughly, this gives us a sense of the probability of sampling a tree with a given parsimony score or lower.
     """
 
-    # Cast a wide net by prioritizing new nodes only
-    print("Running initial iterations of larch-usher...")
-    subprocess.run(["mkdir", "-p", f"{log_dir}_1"])
-    args = [executable,
-            "-i", f"{input}",
-            "-c", f"{round(int(count)/2)}",
-            "-o", f"{out_dir}/opt_dag_1.pb",
-            "-l", f"{log_dir}_1",
-            "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(0),
-            "--sample-any-tree"
-            ]
-    if refseqfile is not None:
-        args.extend(["-r", refseqfile])
-    subprocess.run(args=args)
+    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(input)
+    pars_distribution = dag.weight_count()
 
-    # Start considering parsimonious moves
-    subprocess.run(["mkdir", "-p", f"{log_dir}_2"])
-    args = [executable,
-            "-i", f"{out_dir}/opt_dag_1.pb",
-            "-c", f"{round(int(count)/6)}",
-            "-o", f"{out_dir}/opt_dag_2.pb",
-            "-l", f"{log_dir}_2",
-            "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(1),
-            # "--sample-best-tree"
-            ]
-    subprocess.run(args=args)
+    p_scores = list(pars_distribution.keys())
+    p_scores.sort()
+    cumm_probs = {}
+    print("\t Number of Parsimony scores:", len(p_scores))
+    for k in [0, 0.1, 0.5, 1]:
+        print("\t", k)
+        # dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(input) # TODO: Try getting a fresh copy of the dag.. Doesn't help
+        total_tree_score = dag.probability_annotate(lambda n1, n2: -k * parsimony_utils.hamming_cg_edge_weight(n1, n2), log_probabilities=True)
+        cumm_probs[k] = []
+        for p in p_scores:
+            val = pars_distribution[p] * math.e ** (-k * p) / exp(total_tree_score)
+            if len(cumm_probs[k]) < 1:
+                cumm_probs[k].append(val)
+            else:
+                cumm_probs[k].append(val + cumm_probs[k][-1])
 
-    # Emphasize parsimony over new nodes
-    subprocess.run(["mkdir", "-p", f"{log_dir}_3"])
-    args = [executable,
-            "-i", f"{out_dir}/opt_dag_2.pb",
-            "-c", f"{round(int(count)/6)}",
-            "-o", f"{out_dir}/opt_dag_3.pb",
-            "-l", f"{log_dir}_3",
-            "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(3),
-            "--sample-any-tree"
-            ]
-    subprocess.run(args=args)
+    for k, cumm_prob in cumm_probs.items():
+        plt.plot(p_scores, cumm_probs[k], label=k)
 
-    print("Completing DAG...")
-    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(f"{out_dir}/opt_dag_3.pb")
-    dag.make_complete()
-    dag.to_protobuf_file(f"{out_dir}/complete_opt_dag.pb")
-
-    subprocess.run(["mkdir", "-p", f"{log_dir}_complete"])
-    args = [executable,
-            "-i", f"{out_dir}/complete_opt_dag.pb",
-            "-c", f"{round(int(count)/6)}",
-            "-o", f"{out_dir}/final_opt_dag.pb",
-            "-l", f"{log_dir}_complete",
-            "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(3),
-            "--sample-best-tree"
-            ]
-    subprocess.run(args=args)
+    plt.legend()
+    plt.xlabel("Parsimony Score")
+    plt.ylabel("Cummulative Probability Weight")
+    plt.title(f"Cummulative Probability with Parsimony Weight {parsimony_weight}")
+    out_path = out_dir + f"/cumm_prob_k={parsimony_weight}.png"
+    plt.savefig(out_path)
 
 
-    # TODO: Add --sample-any again?
-
-
-
-
-###################################################################################################
-#### Aggregation ##################################################################################
-###################################################################################################
 
 # TODO: Rename this
 @click.command("agg")
@@ -1122,6 +1197,35 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
     f.clf()
 
 
+    # Histogram plot
+
+    bin_size = 0.05
+
+    # Remove leaf nodes
+    res_no_leaves = []
+    for el in results_full:
+        if len(el[0]) > 1:
+            res_no_leaves.append(el)
+    results = res_no_leaves
+
+    out_path = out_dir + f"/pars_weight_binned_{bin_size}.png"
+    x, y, std_pos, std_neg = bin_hist_plot(results, bin_size=bin_size)
+    plt.plot(x, y, c="red", label="Our Estimate")
+
+    plt.plot(x, std_pos, c="orange", label="Std Dev")
+    plt.plot(x, std_neg, c="orange")
+    plt.fill_between(x, std_neg, std_pos, alpha=0.1, color="orange")
+    plt.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor")
+
+    plt.title(f"Clade {clade_name} Binned Coverage Analysis")
+    plt.ylabel(f"Empirical Probability")
+    plt.xlabel("Estimated Support")
+    f.set_size_inches(6.4, 4.8)
+    plt.legend()
+    plt.savefig(out_path)
+    plt.clf()
+
+
 def bin_hist_plot(results, bin_size=0.05):
     """Given list of results tuples returns xy coords of sliding window plot."""
 
@@ -1163,21 +1267,24 @@ def bin_hist_plot(results, bin_size=0.05):
     # print(f"\tx: {x}\ty: {y}")
     return x, y, pos_devs, neg_devs
 
-@click.command("binned_clade_results")
+
+# TODO: Rename this. This plots all parsiomny coefficient coverage analyses on the same plot with
+#       a sliding window.
+@click.command("pars_weight_clade_results")
 @click.option('--clade_dir', '-c', help='path to clade directory.')
 @click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
 @click.option('--num_sim', '-n', default=1, help='number of simulations to average.')
 @click.option('--method', '-m', default='historydag')
 @click.option('--bin_size', '-b', default=0.05, help='the proportion of the data to use as window size')
-def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
+def pars_weight_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
     """Given the clade directory, performs coverage analysis across all simulations"""
 
     clade_name = clade_dir.split("/")[-1]
 
     result_dict = {}
     for trial in range(1, num_sim+1):
-        # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
-        #   their supports and whether they're in the true tree or not
+        # Assumes that `path/to/clade/trial/results/method/strat_dict_node_weight.pkl stores``
+        #   list of nodes their supports and whether they're in the true tree or not
         result_path = clade_dir + f"/{trial}/results/{method}/strat_dict_node_weight.pkl"
         
         try:
@@ -1197,7 +1304,6 @@ def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
         for p, results in strat_dict.items():
             results_full[p].extend(results[1])
 
-    
     # print(f"\tsorting {len(results_full)} results...")
     for _, results in results_full.items():
         random.shuffle(results)
@@ -1205,12 +1311,20 @@ def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
 
     bin_size = 0.05
     plt.plot([0, 1], [0, 1], color="blue", label="Perfect")
-    pweight = [0, 1, 2, 3, 4, 10, 1e2, 1e10, "inf"]
-    colors = ['#fff7ec','#fee8c8','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f', '#000000', '#33a02c']
-    p_cmap = {p: c for p, c in zip(pweight, colors)}
+
+    pweight = list(results_full.keys())
+    pweight.remove("inf")
+    # TODO: These are for working with previous run of strat_dict
+    pweight.remove(1000)
+    pweight.remove(100000)
+    pweight.remove(10000000000)
+    base = 10
+    print(pweight)
+    colors = list(plt.cm.autumn((np.power(base, np.linspace(0, 1, int(max(pweight) * 10) + 1)) - 1) / (base - 1)))
+    colors.reverse()
 
     for p, results in results_full.items():
-        if p not in pweight:
+        if p != "inf" and p > 10:
             continue
         # Remove leaf nodes
         res_no_leaves = []
@@ -1219,9 +1333,15 @@ def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
                 res_no_leaves.append(el)
         results = res_no_leaves
 
-        out_path = out_dir + f"/single_line_node_weighted_w={200}.png" # f"/pars_weight_binned_{bin_size}.png"
-        x, y, std_pos, std_neg = sliding_window_plot(results, std_dev=True, window_size=200) # bin_hist_plot(results, bin_size=bin_size)
-        plt.plot(x, y, color=p_cmap[p], label=p)
+        out_path = out_dir + f"/single_line_pars_weighted_w={200}.png"
+        x, y, std_pos, std_neg = sliding_window_plot(results, std_dev=True, window_size=200)
+
+        if p != "inf":
+            c = colors[int(p*10)]
+        else:
+            c = "green"
+        
+        plt.plot(x, y, color=c, label=p)
 
         # TODO: Add these back in once you have a better idea of the correct pweight
         # plt.scatter(min_sup, y, color=p_cmap[p], alpha=0.1)
@@ -1231,7 +1351,7 @@ def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
     plt.title(f"Clade {clade_name} Coverage Analysis with Varying Parsimony Weights")
     plt.ylabel(f"Empirical Probability")
     plt.xlabel("Estimated Support")
-    # plt.legend()
+    plt.legend()
     plt.savefig(out_path)
     plt.clf()
 
@@ -1282,7 +1402,8 @@ cli.add_command(agg)
 cli.add_command(agg_strats)
 cli.add_command(agg_pars_weights)
 cli.add_command(bin_pars_weights)
-cli.add_command(binned_clade_results)
+cli.add_command(pars_weight_clade_results)
+cli.add_command(cumm_pars_weight)
 
 if __name__ == '__main__':
     cli()

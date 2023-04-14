@@ -32,19 +32,22 @@ for clade in $(cat clades.txt); do
         outdir=$cladedir/$trial/figures/$method
         mkdir -p $outdir
 
-        # results=$cladedir/$trial/results/$method/results.pkl
+        results=$cladedir/$trial/results/$method/results.pkl
         # python support_pipeline_scripts/cli.py agg -i $results -o $outdir -c $clade -w 0.2 -m $method
         
-        results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
+        # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
         # python support_pipeline_scripts/cli.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
-        python support_pipeline_scripts/cli.py bin_pars_weights -i $results -o $outdir -c $clade -b 0.05 -m $method
+        # python support_pipeline_scripts/cli.py bin_pars_weights -i $results -o $outdir -c $clade -b 0.05 -m $method
+        dag_path=$cladedir/$trial/results/$method/final_opt_dag.pb
+        python support_pipeline_scripts/cli.py cumm_pars_weight -i $dag_path -o $outdir -p 0.1
 
     done
 
     outdir=$cladedir/figures/$method
     mkdir -p $outdir
     # python support_pipeline_scripts/cli.py clade_results -n $num_trials -c $cladedir -o $outdir -m $method
-    python support_pipeline_scripts/cli.py binned_clade_results -n $num_trials -c $cladedir -o $outdir -m $method
+
+    python support_pipeline_scripts/cli.py pars_weight_clade_results -n $num_trials -c $cladedir -o $outdir -m $method
 done
 
 # python support_pipeline_scripts/cli.py agg \

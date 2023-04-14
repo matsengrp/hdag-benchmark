@@ -47,14 +47,6 @@ def aggregate_dnapars_trees(outfiles, root, abundance_file, output_path):
 @click.argument("out_path_base")
 def numerify_taxon_names(input_path, out_path_base):
     """Convert taxon names to s<number>, outputting a "mapping file" and a renamed newick."""
-    # Equivalent-ish to the original bash script:
-    # orig_path=$1
-    # out_path_base=$2
-    # mapping_path=${out_path_base}.mapping
-    # numerified=${out_path_base}.n.nwk
-    # echo "ancestral ancestral" > $mapping_path
-    # nw_labels $orig_path | grep -v ancestral | awk '{print $0 " s" NR}' >> $mapping_path
-    # nw_rename $orig_path $mapping_path > $numerified
 
     mapping_path = out_path_base + ".mapping"
     numerified_path = out_path_base + ".n.nwk"
