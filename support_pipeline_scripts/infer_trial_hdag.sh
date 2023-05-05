@@ -11,7 +11,8 @@ currdir=$1
 clade=$2
 trial=$3
 
-trialdir=$currdir/$clade/$trial
+datadir=$currdir/data
+trialdir=$datadir/$clade/$trial
 simdir=$trialdir/"simulation"
 resultsdir=$trialdir/"results"
 mkdir -p $resultsdir

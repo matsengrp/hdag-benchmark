@@ -13,28 +13,28 @@ clade=$2
 trial=$3
 
 echo $currdir
+datadir=$currdir/data
 
 # cd into the data directory
-cd $currdir
+cd $datadir
 
-trialdir=$currdir/$clade/$trial
+trialdir=$datadir/$clade/$trial
 simdir=$trialdir/"simulation"
 resultsdir=$trialdir/"results"
-mkdir -p $resultsdir
+mrbayesdir=$resultsdir/mrbayes
+mkdir -p $mrbayesdir
 
 ctree=$simdir/collapsed_simulated_tree.nwk
 ctreefasta=${ctree}.fasta
 ctreefasta_with_refseq=$simdir/ctree_with_refseq.fasta
-ctreenexus=$simdir/ctree_with_refseq.nex
+ctreenexus=$mrbayesdir/ctree_with_refseq.nex
 
 # Convert fasta to nexus file for mrbayes
 seqmagick convert $ctreefasta_with_refseq $ctreenexus --alphabet dna
-mrbayesdir=$resultsdir/mrbayes
-mkdir -p $mrbayesdir
 mrbayesfile=$mrbayesdir/run.mb
 mrbayesoutput="mrbayes-output"
 # Produce .mb file describing the mrbayes run (including input and output files)
-python support_pipeline_scripts/python_replace.py ../../run.mb $ctreefasta_with_refseq $mrbayesoutput > $mrbayesfile
+python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput > $mrbayesfile
 
 mb -i $mrbayesfile
 
@@ -43,7 +43,7 @@ mb -i $mrbayesfile
 tree_file=$mrbayesdir/mrbayes-output.trees
 
 # Going back to (what should be) the data directory
-cd $currdir
+cd $datadir
 
 # Extract support from trees
 echo "===> Extracting supports..."
