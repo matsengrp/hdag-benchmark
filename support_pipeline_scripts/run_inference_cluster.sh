@@ -32,7 +32,7 @@ for clade in $(cat ../clades.txt); do
 
     for trial in $(seq $num_trials); do
         logfile=$clade/$trial/results/inference.log
-        echo $logfile
+        echo $logfile $method
 
         mkdir -p $clade/$trial/results
         
