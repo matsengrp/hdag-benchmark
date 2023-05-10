@@ -3,14 +3,14 @@
 # Simulates SARS-CoV-2 data with the following procedure
 #   1. Subset the big UShER generated MAT for a tree topology
 #   2. Randomly resolve all multifurcations
+#   2.5 Give added edges relatively small branch lengths
 #   3. Use PhastSim to simulate internal node sequences all the way out to leaf nodes
-#   4. Store leaf sequences, ancestral sequence, and simulated tree
+#   4. Collapse tree so that all edges have at least one mutation
+#   5. Store leaf sequences, ancestral sequence, and simulated tree
 
 # Paramaters that determine how many trees to simulate for each clade
 num_res=10
 num_sim=10
-
-# TODO: makes these parameters for inference and simulation scripts
 
 echo ""
 echo "=> Simulating trees..."
@@ -46,7 +46,8 @@ for clade in $(cat ../clades.txt); do
     cladedir=$clade
     mkdir -p $cladedir
     tree=$cladedir/tree.nwk
-    matUtils extract -c $clade -i $bigtree -t $tree # Gets the tree topology for subtree of this clade
+    # Gets the tree topology for subtree of this clade with num muations on edges
+    matUtils extract -c $clade -i $bigtree -t $tree
 
     # creates numerified tree newick with name $ntree
     ntreebase=$cladedir/tree
@@ -60,7 +61,7 @@ for clade in $(cat ../clades.txt); do
         mkdir -p $rdir
         rtree=$rdir/rtree.nwk
         
-        hdb resolve-multifurcations -i $ntree -o $rtree --resolve-seed $rseed
+        hdb resolve-multifurcations -i $ntree -o $rtree --resolve-seed $rseed --branch-len-model num-muts
 
         for sim in $(seq $num_sim); do
             echo "      $sim"

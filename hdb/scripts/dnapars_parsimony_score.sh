@@ -14,8 +14,6 @@ prefix=$outdir/dnapars
 rm -rf $prefix
 mkdir -p $prefix
 
-# TODO: Test that outdir works
-
 deduplicate $infasta --root $rootname --idmapfile $prefix/idmap.txt > $prefix/deduplicated.phylip
 realpath $prefix/deduplicated.phylip > $prefix/dnapars.cfg
 echo "J
@@ -27,7 +25,7 @@ O
 5
 .
 V
-1
+100
 Y
 " >> $prefix/dnapars.cfg
 old_dir=$(pwd)

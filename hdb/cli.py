@@ -8,6 +8,7 @@ import hdb.aggregate_dnapars_trees as agg
 import ete3
 import pickle
 import random
+import math
 
 
 # Entry point
@@ -46,14 +47,6 @@ def aggregate_dnapars_trees(outfiles, root, abundance_file, output_path):
 @click.argument("out_path_base")
 def numerify_taxon_names(input_path, out_path_base):
     """Convert taxon names to s<number>, outputting a "mapping file" and a renamed newick."""
-    # Equivalent-ish to the original bash script:
-    # orig_path=$1
-    # out_path_base=$2
-    # mapping_path=${out_path_base}.mapping
-    # numerified=${out_path_base}.n.nwk
-    # echo "ancestral ancestral" > $mapping_path
-    # nw_labels $orig_path | grep -v ancestral | awk '{print $0 " s" NR}' >> $mapping_path
-    # nw_rename $orig_path $mapping_path > $numerified
 
     mapping_path = out_path_base + ".mapping"
     numerified_path = out_path_base + ".n.nwk"
@@ -127,49 +120,90 @@ def collapse_tree(input_newick, input_fasta, output_newick):
 @click.option("-i", "--input-path", help="Newick tree input path.")
 @click.option("-o", "--output-path", help="Output path.")
 @click.option("-s", "--resolve-seed", default=1)
-def resolve_multifurcations(input_path, output_path, resolve_seed):
+@click.option("-b", "--branch-len-model", default="num-muts")
+def resolve_multifurcations(input_path, output_path, resolve_seed, branch_len_model):
+    """
+    Given an ete tree, resolves all polytomies by creating a
+    uniformly random bifurcating tree that is consistent with
+    the multifurcating one.
+    """
     tree = ete3.Tree(input_path, format=1)
-    resolve_polytomy(tree, resolve_seed)
+    resolve_polytomy(tree, resolve_seed, branch_len_model)
     tree.write(outfile=output_path, format=1)
 
 
-def resolve_polytomy(tree, seed):
-        """
-        Given an ete tree, resolves all polytomies by creating a
-        uniformly random bifurcating tree that is consistent with
-        the multifurcating one.
-        """
+def resolve_polytomy(tree, seed, branch_len_model):
+    """
+    Given an ete tree, resolves all polytomies by creating a
+    uniformly random bifurcating tree that is consistent with
+    the multifurcating one.
+    """
 
-        random.seed(seed)
+    # Controls how much multifurcation in simulation
+    # TODO: Trying smaller values here (was 0.01)
+    resolved_multifurc_len = 0.001
 
-        # TODO: Consider ways of partially resolving this tree...
-        def _resolve(node):
-            new_node_name = 1
-            if len(node.children) > 2:
-                node_list = list(node.children)
-                node.children = []
-                while len(node_list) > 2:
-                    # Randomly sample a pair of nodes
-                    pair = random.sample(range(0, len(node_list)-1), 2)
-                    pair.sort()
-                    
-                    # merge under a parent node
-                    par = ete3.Tree()
-                    par.name = f"r{new_node_name}"
-                    new_node_name += 1
-                    par.add_child(node_list.pop(pair[1]))
-                    par.add_child(node_list.pop(pair[0]))
+    with open("refseq.fasta", "r") as f:
+        f.readline()
+        genome = f.readline()
+        genome_len = len(genome)
+        print("Genome has length", genome_len)
 
-                    # insert into list for this node to be further merged
-                    node_list.append(par)
+    random.seed(seed)
+    new_node_name = 1
+
+    def jc_dist(num_mut):
+        # genome_len = 29904
+        mut_prop = num_mut / genome_len
+        return -3/4 * math.log(1 - 4/3 * mut_prop)
+
+    def _resolve(node, new_node_name):
+        if len(node.children) > 2:
+            node_list = list(node.children)
+            avg_mut = sum([n.dist for n in node_list]) / len(node_list) # Average number of mutations from parent
+            node.children = []
+            while len(node_list) > 2:
+                # Randomly sample a pair of nodes
+                pair = random.sample(range(0, len(node_list)-1), 2)
+                pair.sort() # TODO: Why are we doing this?
                 
-                node.add_child(node_list[0])
-                node.add_child(node_list[1])
+                # Create new node and make branch length
+                par = ete3.Tree()
 
-        target = [tree]
-        target.extend([n for n in tree.traverse("postorder")])
-        for n in target:
-            _resolve(n)
+                if branch_len_model == "jc":
+                    adj_dist = resolved_multifurc_len
+                    par.dist = jc_dist(resolved_multifurc_len)
+                elif branch_len_model == "num-muts":
+                    adj_dist = resolved_multifurc_len
+                    par.dist = adj_dist
+
+                # merge under a parent node
+                par.name = f"r{new_node_name}"
+                new_node_name += 1
+                par.add_child(node_list.pop(pair[1]))
+                par.add_child(node_list.pop(pair[0]))
+
+                # insert into list for this node to be further merged
+                node_list.append(par)
+            
+            node.add_child(node_list[0])
+            node.add_child(node_list[1])
+
+    target = [tree]
+    # TODO: Should we use get_descendants instead of postorder??
+    # target.extend([n for n in tree.traverse("postorder")])
+    target.extend([n for n in tree.get_descendants()])
+    for n in target:
+        # Compute branch lengths for edge above node if not a parent node
+        if not n.is_root():
+            if branch_len_model == "jc":
+                branch_len = jc_dist(n.dist)
+            elif branch_len_model == "num-muts":
+                branch_len = n.dist
+
+            n.dist = branch_len
+        
+        _resolve(n, new_node_name) # Resolve the edges under given node
 
 
 
