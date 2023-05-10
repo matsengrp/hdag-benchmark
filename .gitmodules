@@ -1,6 +1,6 @@
 [submodule "hdb/newick-parser"]
 	path = hdb/newick-parser
-	url = git://github.com:willdumm/newick-parser.git
+	url = https://github.com/willdumm/newick-parser.git
 [submodule "hdb/gctree"]
 	path = hdb/gctree
 	url = https://github.com/matsengrp/gctree.git

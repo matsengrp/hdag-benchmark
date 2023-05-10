@@ -1,5 +1,8 @@
 import click
+import re
 import historydag as hdag
+from historydag.parsimony import load_fasta, build_tree, disambiguate, sankoff_upward
+from itertools import islice
 import ete3 as ete
 import random
 import pickle
@@ -11,7 +14,7 @@ import json
 
 import random
 import subprocess
-from hdb.newick_parser.tree_transformer import iter_nexus_trees
+# from newick_parser.tree_transformer import iter_nexus_trees
 from historydag import parsimony_utils
 
 from math import exp
@@ -341,7 +344,7 @@ def hdag_output(node_set, pb_file, taxId2seq):
 
 
 def get_trprobs_trees(trprobs_file):
-    with open('ds1.trprobs', 'r') as fh:
+    with open(trprobs_file, 'r') as fh:
         for line in fh:
             if 'translate' in line:
                 break
@@ -352,18 +355,17 @@ def get_trprobs_trees(trprobs_file):
             if idx_name[-1] == ';':
                 break
 
-    with open('ds1.trprobs', 'r') as fh:
+    with open(trprobs_file, 'r') as fh:
         for line in fh:
             if 'tree' in line.strip()[0:5]:
                 treeprob = float(re.search(r"(p = )([\d\.]+)", line).groups()[-1])
                 cumulprob = float(re.search(r"(P = )([\d\.]+)", line).groups()[-1])
                 nwk = line.strip().split(' ')[-1]
-                tree = build_tree(nwk, fasta)
+                tree = build_tree(nwk, translate_dict)
                 for node in tree.iter_leaves():
                     node.name = translate_dict[node.name]
                 # put original ambiguous sequences back on leaves
                 print('.')
-                tree.pars_score = pars_score
                 tree.prob = treeprob
                 tree.cumulprob = cumulprob
                 yield tree
