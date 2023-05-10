@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import os
-import dendropy
 import json
 
 import random
@@ -65,10 +64,9 @@ def parse_clade_stats(in_file):
                 print(name, "\t", leaf_count)
 
 
-# TODO: Rename to get_tree_stats or something
-@click.command("get_pars_score")
+@click.command("get_tree_stats")
 @click.option('--sim_dir', '-s', help='the folder containing TOI and fasta file.')
-def get_pars_score(sim_dir):
+def get_tree_stats(sim_dir):
     """
     Computes the parsimony score of the simulated tree, the maximum possible parsimony given the
     topology, and the maximum parsimony on the leaves. Stores results as a json at sim_dir/tree_stats.json
@@ -171,9 +169,9 @@ def get_pars_score(sim_dir):
         "multifurc_distribution": multifurc_counts
     }
 
-    # Add similar states from the USHER tree
-
-    usher_tree_path = sim_dir.split("/")[0] + "/tree.n.nwk"
+    # Add similar stats from the USHER tree
+    clade_dir = sim_dir.split("/")[0] # TODO: Change this back pls
+    usher_tree_path = clade_dir + "/tree.n.nwk"
     print("usher tree path:", usher_tree_path)
     usher_tree = ete.Tree(usher_tree_path, format=1)
     # Remove multifurcations
@@ -228,19 +226,19 @@ def get_pars_score(sim_dir):
 def save_supports(method, tree_path, input_path, output_path):
     """
     A method for computing, formatting, and saving node supports for various methods of inference 
-    Input:  method of inference (e.g., hdag, beast, etc.),
+    Input:  method of inference (e.g., hdag, beast, dag-inf, hdag-adj, etc.),
             input file path (e.g., to history dag, or beast output),
             output filepath 
     Output: For each file in the input directory, a text file containing list of support values in the
             format (clade, estimated_support, in_tree)
 
     E.g.
-python support_pipeline_scripts/cli.py save_supports \
--m hdag-inf \
--t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/simulation/collapsed_simulated_tree.nwk \
--i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/final_opt_dag.pb \
--o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/results_adj.pkl
-    """
+    python support_pipeline_scripts/cli.py save_supports \
+    -m hdag-inf \
+    -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/simulation/collapsed_simulated_tree.nwk \
+    -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/final_opt_dag.pb \
+    -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/results_adj.pkl
+        """
 
     # Map of taxon id (e.g., s1, s4, etc) to full sequence
     fasta_path = tree_path + ".fasta"
@@ -256,9 +254,14 @@ python support_pipeline_scripts/cli.py save_supports \
     elif method[0:5] == "hdag-":
         if method[5:] == "inf":
             p = "inf"
+            adjust = False
+        elif method[5:] == "adj":
+            p = "inf"
+            adjust = True
         else:
             p = float(method[5:])
-        support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p)
+            adjust = False
+        support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)
 
     elif method == "mrbayes":
         support_list = mrbayes_output(node_set, input_path)
@@ -272,8 +275,9 @@ python support_pipeline_scripts/cli.py save_supports \
     else:
         raise Exception(f"Invalid method: {method}")
 
-    # TODO: Remove nodes with a support value of 0
-    support_list = [result for result in support_list if result[1] > 0]
+    # NOTE: Some
+    # support_list = [result for result in support_list if result[1] > 0]
+    print(len([result for result in support_list if result[1] == 0]), "nodes with 0 support")
 
     with open(output_path, "wb") as f:
         pickle.dump(support_list, f)
@@ -301,9 +305,9 @@ def get_true_nodes(tree_path):
     return set([v for k, v in etenode2cu.items()])
 
 
-def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=False):
+def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=False, adjust=False):
     """
-    Uses a generalized node support that considers non-MP trees and weights them as a functions
+    Uses a generalized node support that can consider non-MP trees and weights them as a functions
     of their parsiomny score.
 
     Returns a list of tuples (clade_id, estimated_support, in_tree). The list is sorted by
@@ -311,44 +315,36 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
 
     Args:
         node_set: Set of nodes (sets of taxa ids) that are in the true tree.
-        inp: Otimized DAG or a protobuf file to the optimized DAG. WARNING: dag input will be mutated.
+        inp: Otimized DAG or a protobuf file to the optimized DAG. WARNING: dag input may be
+            mutated.
         taxId2Seq: Dicitonary of taxon IDs to the sequences they represent
         pars_weight: Constant to multiply by in the pscore_fn. If `inf`, then use uniform
             distribution over MP trees. Otherwise, support for edge (n1, n2) is computed as
             exp(-<pars_weight> * <pars(n1, n2)>)
+        bifurcate: Whether to compute support with respect to all compatible bifurcating trees in
+            the hDAG.
+        adjust: Whether to use adjusted node support
     """
 
-    print("Parsiomny score weight:", pars_weight, "\n")
+    print(f"=> Parsiomny score weight: k={pars_weight}")
 
     if isinstance(inp, str):
-        print("Loading MAD...")
-        start = time.time()
         dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(inp)
-        print(f"\t Took {(time.time() - start)/60} minutes")
     else:
         dag = inp
 
-    print("Completing and Collapsing DAG...")
-    start = time.time()
     dag.make_complete()
-    print(f"\t Took {(time.time() - start)/60} minutes")
-
-    start = time.time()
     dag.convert_to_collapsed()
-    print(f"\t Took {(time.time() - start)/60} minutes")
-
 
     if isinstance(pars_weight, str):
         # This recovers uniform distribution over MP trees
         dag.trim_optimal_weight()
-        pscore_fn = lambda n1, n2: 1    # TODO: Retry inference with p_score = 1...
+        pscore_fn = lambda n1, n2: 1
     else:
         pscore_fn = lambda n1, n2: -pars_weight * parsimony_utils.hamming_cg_edge_weight(n1, n2)
 
-    print("\n\tDAG contains", dag.count_trees(), "trees\n")
+    print("=> DAG contains", dag.count_trees(), "trees")
 
-    print("Annotating supports...")
-    start = time.time()
     if bifurcate:
         def bifurcation_correction(node):
             if len(node.clades) > 2:
@@ -360,10 +356,11 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
     else:
         dag.probability_annotate(lambda n1, n2: pscore_fn(n1, n2), log_probabilities=True)
         log_prob = True
-    
-    # NOTE: Using adjusted node probabilities now
-    support = dag.adjusted_node_probabilities(log_probabilities=log_prob, collapse_key=lambda n: n.clade_union())
-    print(f"\t Took {(time.time() - start)/60} minutes")
+
+    if adjust:
+        support = dag.adjusted_node_probabilities(log_probabilities=log_prob, collapse_key=lambda n: n.clade_union(), mut_type="site")
+    else:
+        support = dag.node_probabilities(log_probabilities=log_prob, collapse_key=lambda n: n.clade_union())
 
     seq2taxId = {v: k for k, v in taxId2seq.items()}
 
@@ -372,7 +369,6 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
     node2stats = {}
 
     # Get the support for all dag nodes
-    counter = 0
     for node in support:
         if len(node) <= 1:  # UA node and leaves
             continue
@@ -384,25 +380,26 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
             est_sup = exp(est_sup)
         node2stats[id_node] = (est_sup, id_node in node_set)
     
-
+    # NOTE: 
     # Get the support for all nodes in true tree
-    for id_node in node_set:
-        if id_node not in node2stats.keys() and len(id_node) > 1:
-            node2stats[id_node] = (0, True)
+    # for id_node in node_set:
+    #     if id_node not in node2stats.keys() and len(id_node) > 1:
+    #         node2stats[id_node] = (0, True)
 
-    print("Considering", len(node2stats), "nodes")
+    print("=> Considering", len(node2stats), "internal DAG nodes")
     stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
     random.shuffle(stats_list)
     stats_list.sort(key=lambda el: el[1])
 
     return stats_list
 
-
+# TODO: Remove in favor of hdag_ouput general
 def hdag_output(node_set, pb_file, taxId2seq):
     """
     Returns a list of tuples (clade_id, estimated_support, in_tree). The list is primarily
     sorted by estimated support, and portions that have the same support are randomly shuffled
     """
+    raise Warning("The function `hdag_output` is deprecated in favor of hdag_output_general")
     dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
     dag.make_complete()
     dag.convert_to_collapsed()
@@ -1227,15 +1224,15 @@ def cumm_pars_weight(input, out_dir, parsimony_weight):
 
 
 
-# TODO: Rename this
-@click.command("agg")
+@click.command("coverage_trial_plot")
 @click.option('--input', '-i', help='file path to input list as a pickle.')
 @click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
 @click.option('--method', '-m', default='historydag')
 @click.option('--clade_name', '-c')
 @click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
-def agg(input, out_dir, clade_name, method, window_proportion=0.20):
-    """Given the pickled file, aggregates results for support values"""
+def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.20):
+    """Given the pickled file, aggregates results for support values for a single trial into a
+    coverage analysis plot"""
 
     try:
         with open(input, "rb") as f:
@@ -1257,7 +1254,7 @@ def agg(input, out_dir, clade_name, method, window_proportion=0.20):
     else:
         window_size = int(len(results) * window_proportion)
 
-    out_path = out_dir + f"/support_quartiles_w={window_size}.png"
+    out_path = out_dir + f"/adj_support_quartiles_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
     # print("est\ttrue\tQ1\tQ3")
@@ -1275,7 +1272,7 @@ def agg(input, out_dir, clade_name, method, window_proportion=0.20):
     ax1.scatter(min_sup, y, color="orange", alpha=0.1)
     ax1.scatter(max_sup, y, color="orange", alpha=0.1)
     # ax1.fill_betweenx(y, min_sup, max_sup, alpha=0.2, color="orange", label="Support Range")
-    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect", linestyle="dashed")
     ax1.legend()
     
     ax2.hist(x)
@@ -1288,20 +1285,119 @@ def agg(input, out_dir, clade_name, method, window_proportion=0.20):
 
 @click.command("clade_results")
 @click.option('--clade_dir', '-c', help='path to clade directory.')
-@click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
+@click.option('--out_path', '-o', help='output path to store figures/tables in.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
 @click.option('--num_sim', '-n', default=1, help='number of simulations to average.')
 @click.option('--method', '-m', default='historydag')
 @click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
-def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
+def clade_results(clade_dir, out_path, num_sim, method, window_proportion, results_name):
     """Given the clade directory, performs coverage analysis across all simulations"""
 
+    results_full = get_results_full(clade_dir, num_sim, method, results_name)
+    window_size = int(len(results_full) * window_proportion)
+
+    print(f"\tgenerating window plot at {out_path}...")
+    x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
+
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
+    f.set_size_inches(7, 9)
     clade_name = clade_dir.split("/")[-1]
+    ax1.set_title(f"Clade {clade_name} Coverage Analysis")
+
+    ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results_full)})")
+    ax1.plot(x, y, color="orange", label="Support Regressor")
+    ax1.fill_between(x, pos_devs, neg_devs, alpha=0.2, color="orange")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor", linestyle="dashed")
+    ax1.legend()
+    
+    ax2.hist(x)
+    ax2.set_yscale("log")
+    ax2.set_xlabel("Estimated Support")
+    f.savefig(out_path)
+    f.clf()
+    # # Histogram plot
+    # bin_size = 0.05
+    # # Remove leaf nodes
+    # res_no_leaves = []
+    # for el in results_full:
+    #     if len(el[0]) > 1:
+    #         res_no_leaves.append(el)
+    # results = res_no_leaves
+    # out_path = out_dir + f"/pars_weight_binned_{bin_size}.png"
+    # x, y, std_pos, std_neg = bin_hist_plot(results, bin_size=bin_size)
+    # plt.plot(x, y, c="red", label="Our Estimate")
+    # plt.plot(x, std_pos, c="orange", label="Std Dev")
+    # plt.plot(x, std_neg, c="orange")
+    # plt.fill_between(x, std_neg, std_pos, alpha=0.1, color="orange")
+    # plt.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor")
+    # plt.title(f"Clade {clade_name} Binned Coverage Analysis")
+    # plt.ylabel(f"Empirical Probability")
+    # plt.xlabel("Estimated Support")
+    # f.set_size_inches(6.4, 4.8)
+    # plt.legend()
+    # plt.savefig(out_path)
+    # plt.clf()
+
+@click.command("clade_results_random_scaling")
+@click.option('--clade_dir', '-c', help='path to clade directory.')
+@click.option('--out_path', '-o', help='output path to store figures/tables in.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
+@click.option('--num_sim', '-n', default=1, help='number of simulations to average.')
+@click.option('--method', '-m', default='historydag')
+@click.option('--sample_size', '-s', default=0.5, help='proportion of results to randomly scale.')
+@click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
+def clade_results_random_scaling(clade_dir, out_path, num_sim, method, window_proportion, results_name, sample_size):
+    """Given the clade directory, performs coverage analysis across all simulations"""
+
+    # scale_range = (0.75, 0.95)
+    scale_range = (0.5, 1)
+
+    # Randomly scale support values and re-sort
+    results_full = get_results_full(clade_dir, num_sim, method, results_name)
+    print("length of results", len(results_full))
+    results_full_rand = []
+    idxs = random.sample(range(len(results_full)), int(len(results_full) * sample_size))
+    for i, (node, est_sup, in_tree) in enumerate(results_full):
+        if i in idxs:
+            est_sup = est_sup * random.uniform(scale_range[0], scale_range[1])
+        results_full_rand.append((node, est_sup, in_tree))
+    results_full = results_full_rand
+    random.shuffle(results_full)
+    results_full.sort(key=lambda el: el[1])
+
+    window_size = int(len(results_full) * window_proportion)
+
+    print(f"\tgenerating window plot at {out_path}...")
+    x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
+
+    # Plotting code
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
+    f.set_size_inches(7, 9)
+    clade_name = clade_dir.split("/")[-1]
+    ax1.set_title(f"Clade {clade_name} Coverage Analysis")
+    ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results_full)})")
+    ax1.plot(x, y, color="orange", label="Support Regressor")
+    ax1.fill_between(x, pos_devs, neg_devs, alpha=0.2, color="orange")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor", linestyle="dashed")
+    ax1.legend()
+    ax2.hist(x)
+    ax2.set_yscale("log")
+    ax2.set_xlabel("Estimated Support")
+    f.savefig(out_path)
+    f.clf()
+
+
+def get_results_full(clade_dir, num_sim, method, results_name):
+    """
+    Helper method for `clade_results` that aggregates all the results.pkl files for each trial
+    into a single sorted list.
+    """
 
     result_dict = {}
     for trial in range(1, num_sim+1):
         # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
         #   their supports and whether they're in the true tree or not
-        result_path = clade_dir + f"/{trial}/results/{method}/results.pkl"
+        result_path = clade_dir + f"/{trial}/results/{method}/{results_name}"
         
         try:
             with open(result_path, "rb") as f:
@@ -1329,51 +1425,20 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
         print("\n==>No results to print :(\n")
         return
 
-    # Multi-line Plot
-
-    # avg_window_size = 0
-    # avg_results_length = 0
-    # for trial in result_dict.keys():
-    #     result = result_dict[trial]
-
-    #     if method == "beast":
-    #         window_size = 100
-    #     else:
-    #         window_size = int(len(result) * window_proportion)
-        
-    #     avg_window_size += window_size
-    #     avg_results_length += len(result)
-    #     x, y = sliding_window_plot(result, window_size=window_size)
-    #     plt.plot(x, y)
-    
-    # avg_results_length /= int(len(result_dict))
-    # avg_window_size /= int(len(result_dict))
-
-    # plt.plot([0, 1], [0, 1])
-    # plt.xlabel("Estimated Support")
-    # plt.ylabel(f"Empirical Probability (window_size~{int(avg_window_size)}/{int(avg_results_length)})")
-    # plt.title(f"Aggregated {clade_name} Coverage Analysis")
-    # out_path = out_dir + f"/multi_line_w={int(avg_window_size)}.png"
-    # plt.savefig(out_path)
-    # plt.clf()
-
-
-
-    # Single-line Plot
-
     results_full = []
     for trial, results in result_dict.items():
         toi_node_count = 0
         num_leaves = 0
         for result in results:
-            if result[1] > 1.0:
-                print("node length:", len(node))
-                print("trial:", trial)
-                continue
+            # TODO: Why are you doing this??
+            # if result[1] > 1.0:
+            #     print("node length:", len(node))
+            #     print("trial:", trial)
+            #     continue
 
             node = result[0]
             if len(node) > 1:       # Removing leaves
-                results_full.append(result)
+                results_full.append((result[0], result[1], result[2]))
                 if result[2]:
                     toi_node_count += 1
             else:
@@ -1388,61 +1453,7 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
     print(f"\tsorting {len(results_full)} results...")
     random.shuffle(results_full)
     results_full.sort(key=lambda el: el[1])
-
-
-    if method == "beast":
-        window_size = 100
-    else:
-        window_size = int(len(results_full) * window_proportion)
-
-    out_path = out_dir + f"/single_line_w={window_size}.png"
-    print(f"\tgenerating window plot at {out_path}...")
-    x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
-
-    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
-    f.set_size_inches(7, 9)
-    ax1.set_title(f"Clade {clade_name} Coverage Analysis")
-
-    ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results_full)})")
-    ax1.plot(x, y, color="orange", label="Support Regressor")
-    ax1.fill_between(x, pos_devs, neg_devs, alpha=0.2, color="orange")
-    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor")
-    ax1.legend()
-    
-    ax2.hist(x)
-    ax2.set_yscale("log")
-    ax2.set_xlabel("Estimated Support")
-    f.savefig(out_path)
-    f.clf()
-
-
-    # Histogram plot
-
-    bin_size = 0.05
-
-    # Remove leaf nodes
-    res_no_leaves = []
-    for el in results_full:
-        if len(el[0]) > 1:
-            res_no_leaves.append(el)
-    results = res_no_leaves
-
-    out_path = out_dir + f"/pars_weight_binned_{bin_size}.png"
-    x, y, std_pos, std_neg = bin_hist_plot(results, bin_size=bin_size)
-    plt.plot(x, y, c="red", label="Our Estimate")
-
-    plt.plot(x, std_pos, c="orange", label="Std Dev")
-    plt.plot(x, std_neg, c="orange")
-    plt.fill_between(x, std_neg, std_pos, alpha=0.1, color="orange")
-    plt.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor")
-
-    plt.title(f"Clade {clade_name} Binned Coverage Analysis")
-    plt.ylabel(f"Empirical Probability")
-    plt.xlabel("Estimated Support")
-    f.set_size_inches(6.4, 4.8)
-    plt.legend()
-    plt.savefig(out_path)
-    plt.clf()
+    return results_full
 
 
 def bin_hist_plot(results, bin_size=0.05):
@@ -1674,16 +1685,17 @@ def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200
 cli.add_command(test_pars_weights)
 cli.add_command(trim_thresholds)
 cli.add_command(parse_clade_stats)
-cli.add_command(get_pars_score)
+cli.add_command(get_tree_stats)
 cli.add_command(clade_results)
 cli.add_command(save_supports)
 cli.add_command(larch_usher)
-cli.add_command(agg)
+cli.add_command(coverage_trial_plot)
 cli.add_command(agg_strats)
 cli.add_command(agg_pars_weights)
 cli.add_command(bin_pars_weights)
 cli.add_command(pars_weight_clade_results)
 cli.add_command(cumm_pars_weight)
+cli.add_command(clade_results_random_scaling)
 
 if __name__ == '__main__':
     cli()
