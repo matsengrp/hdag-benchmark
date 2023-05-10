@@ -193,12 +193,10 @@ def save_supports(method, tree_path, input_path, output_path):
         else:
             p = float(method[5:])
         support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p)
-    
     elif method == "beast":
         support_list = beast_output(node_set, input_path)
-    
     elif method == "mrbayes":
-
+        support_list = mrbayes_output(node_set, input_path)
     else:
         raise Exception(f"Invalid method: {method}")
 
@@ -345,11 +343,24 @@ def hdag_output(node_set, pb_file, taxId2seq):
 def get_trprobs_trees(trprobs_file):
     with open('ds1.trprobs', 'r') as fh:
         for line in fh:
+            if 'translate' in line:
+                break
+        translate_dict = {}
+        for line in fh:
+            idx, idx_name = line.strip().split(' ')
+            translate_dict[idx] = idx_name[:-1]
+            if idx_name[-1] == ';':
+                break
+
+    with open('ds1.trprobs', 'r') as fh:
+        for line in fh:
             if 'tree' in line.strip()[0:5]:
                 treeprob = float(re.search(r"(p = )([\d\.]+)", line).groups()[-1])
                 cumulprob = float(re.search(r"(P = )([\d\.]+)", line).groups()[-1])
                 nwk = line.strip().split(' ')[-1]
                 tree = build_tree(nwk, fasta)
+                for node in tree.iter_leaves():
+                    node.name = translate_dict[node.name]
                 # put original ambiguous sequences back on leaves
                 print('.')
                 tree.pars_score = pars_score

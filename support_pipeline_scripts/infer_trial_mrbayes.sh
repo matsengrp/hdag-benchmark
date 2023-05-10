@@ -32,7 +32,7 @@ ctreenexus=$mrbayesdir/ctree_with_refseq.nex
 # Convert fasta to nexus file for mrbayes
 seqmagick convert $ctreefasta_with_refseq $ctreenexus --alphabet dna
 mrbayesfile=$mrbayesdir/run.mb
-mrbayesoutput="mrbayes-output"
+mrbayesoutput=$mrbayesdir/mrbayes-output
 # Produce .mb file describing the mrbayes run (including input and output files)
 python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput > $mrbayesfile
 
@@ -40,7 +40,7 @@ mb -i $mrbayesfile
 
 # Although the mrbayes-output.trprobs file contains the deduplicated
 # topologies, annotated with their posterior probabilities.
-tree_file=$mrbayesdir/mrbayes-output.trees
+tree_file=$mrbayesdir/mrbayes-output.trprobs
 
 # Going back to (what should be) the data directory
 cd $datadir
@@ -48,7 +48,7 @@ cd $datadir
 # Extract support from trees
 echo "===> Extracting supports..."
 conda activate hdag-benchmark
-python ../support_pipeline_scripts/cli.py save_supports -m "mrbayes" -t $ctree -i $tree_file -o $mrbayesdir/results.pkl
+python $currdir/support_pipeline_scripts/cli.py save_supports -m "mrbayes" -t $ctree -i $tree_file -o $mrbayesdir/results.pkl
 echo ""
 echo ""
 
