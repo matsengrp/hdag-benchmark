@@ -19,6 +19,7 @@ conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 
+currdir=$PWD
 datadir=data
 cd $datadir
 
@@ -36,7 +37,8 @@ for clade in $(cat ../clades.txt); do
 
         mkdir -p $clade/$trial/results
         
-        sbatch -c 2 -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
-        ./../support_pipeline_scripts/infer_trial_$method.sh $PWD $clade $trial
+        sbatch -c 1 -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
+        $currdir/support_pipeline_scripts/infer_trial_$method.sh $currdir $clade $trial
+
     done
 done

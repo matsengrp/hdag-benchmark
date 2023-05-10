@@ -11,7 +11,8 @@ currdir=$1
 clade=$2
 trial=$3
 
-trialdir=$currdir/$clade/$trial
+datadir=$currdir/data
+trialdir=$datadir/$clade/$trial
 simdir=$trialdir/"simulation"
 resultsdir=$trialdir/"results"
 mkdir -p $resultsdir
@@ -53,11 +54,3 @@ optdag_final=final_opt_dag
 python ../support_pipeline_scripts/cli.py test_pars_weights -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/strat_dict_node_weight.pkl
 echo ""
 echo ""
-
-# "
-# python support_pipeline_scripts/cli.py save_supports \
-# -m "hdag-inf" \
-# -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/simulation/collapsed_simulated_tree.nwk \
-# -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/results/historydag/final_opt_dag.pb \
-# -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/results/historydag/results_p=inf.pkl
-# "

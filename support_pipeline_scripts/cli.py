@@ -1,5 +1,8 @@
 import click
+import re
 import historydag as hdag
+from historydag.parsimony import load_fasta, build_tree, disambiguate, sankoff_upward
+from itertools import islice
 import ete3 as ete
 import random
 import pickle
@@ -12,6 +15,9 @@ import json
 
 import random
 import subprocess
+
+# from newick_parser.tree_transformer import iter_nexus_trees
+from historydag import parsimony_utils
 from math import exp
 import math
 import time
@@ -254,6 +260,8 @@ python support_pipeline_scripts/cli.py save_supports \
             p = float(method[5:])
         support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p)
 
+    elif method == "mrbayes":
+        support_list = mrbayes_output(node_set, input_path)
     elif method == "beast":
         # support_list = beast_output(node_set, input_path)
         raise Exception("BEAST inference is currently not supported.")
@@ -432,6 +440,113 @@ def hdag_output(node_set, pb_file, taxId2seq):
 
     return stats_list
 
+def get_trprobs_trees(trprobs_file):
+    with open(trprobs_file, 'r') as fh:
+        for line in fh:
+            if 'translate' in line:
+                break
+        translate_dict = {}
+        for line in fh:
+            idx, idx_name = line.strip().split(' ')
+            translate_dict[idx] = idx_name[:-1]
+            if idx_name[-1] == ';':
+                break
+
+    with open(trprobs_file, 'r') as fh:
+        for line in fh:
+            if 'tree' in line.strip()[0:5]:
+                treeprob = float(re.search(r"(p = )([\d\.]+)", line).groups()[-1])
+                cumulprob = float(re.search(r"(P = )([\d\.]+)", line).groups()[-1])
+                nwk = line.strip().split(' ')[-1]
+                tree = build_tree(nwk, translate_dict)
+                for node in tree.iter_leaves():
+                    node.name = translate_dict[node.name]
+                # put original ambiguous sequences back on leaves
+                print('.')
+                tree.prob = treeprob
+                tree.cumulprob = cumulprob
+                yield tree
+
+def reroot(new_root):
+    """
+    Edits the tree that the given node, new_root, is a part of so that it becomes the root.
+    Returns pointer to the new root. Also, removes any unifurcations caused by edits.
+    """
+    node_path = [new_root]
+    curr = new_root
+    while not curr.is_root():
+        node_path.append(curr.up)
+        curr = curr.up
+
+    root = node_path[-1]
+    delete_root = len(root.children) <= 2
+    
+    while len(node_path) >= 2:
+        curr_node = node_path[-1]
+        curr_child = node_path[-2]
+        curr_child.detach()
+        curr_child.add_child(curr_node)
+        node_path = node_path[:-1]
+    if delete_root:
+        root.delete()
+
+    # NOTE: Need to delete new root's child because it will be a unifurcation
+    list(curr_child.children)[0].delete()
+
+    return curr_child
+    
+def make_stats_list(node2support, node_set):
+    # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
+    # support and whether that node is in the true tree or not
+    node2stats = {}
+
+    # Get the support for all dag nodes
+    counter = 0
+    for id_node, est_sup in node2support.items():
+        if len(id_node) == 0:  # UA node
+            continue
+
+        node2stats[id_node] = (est_sup, id_node in node_set)
+    
+    # Get the support for all nodes in true tree
+    for id_node in node_set:
+        if id_node not in node2stats.keys():
+            node2stats[id_node] = (0, True)
+
+    print("Considering", len(node2stats), "nodes")
+    stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
+    random.shuffle(stats_list)
+    stats_list.sort(key=lambda el: el[1])
+    return stats_list
+
+def mrbayes_output(node_set, tree_file):
+    """Same as hdag output, but for MrBayes"""
+    node2support = {}
+    for tree in get_trprobs_trees(tree_file):
+        rerooted = reroot(tree.search_nodes(name="ancestral")[0])
+        node2cu = {}
+        curr_internal_name = 0
+        for node in rerooted.traverse("postorder"):
+            if node.is_leaf():
+                cu = [node.name]
+            else:
+                node.name = f"internal{curr_internal_name}"
+                curr_internal_name += 1
+                cu = []
+                for child in node.children:
+                    cu.extend(list(node2cu[child.name]))
+            
+            cu = frozenset(cu)
+            node2cu[node.name] = cu
+            if cu not in node2support:
+                node2support[cu] = 0
+            # The unrooted topologies in trprobs are unique, so we don't need
+            # to worry about uniqueness when rerooting them:
+            node2support[cu] += tree.prob
+
+    return make_stats_list(node2support, node_set)
+
+        
 def random_output(node_set, tree_file):
     """Same as hdag output, but for randomly generated file of ete trees.
     
@@ -457,6 +572,7 @@ def random_output(node_set, tree_file):
     
     with open(tree_file, "w") as f:
         f.writelines(tree_list)
+
 
     total_trees = 0
     node2count = {}
@@ -493,28 +609,8 @@ def random_output(node_set, tree_file):
             print(node)
         node2support[node] = count / total_trees
 
+    return make_stats_list(node2support, node_set)
 
-    # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
-    # support and whether that node is in the true tree or not
-    node2stats = {}
-
-    # Get the support for all dag nodes
-    for id_node, est_sup in node2support.items():
-        if len(id_node) == 0:  # UA node
-            continue
-        node2stats[id_node] = (est_sup, id_node in node_set)
-    
-    # Get the support for all nodes in true tree
-    for id_node in node_set:
-        if id_node not in node2stats.keys():
-            node2stats[id_node] = (0, True)
-
-    print("Considering", len(node2stats), "nodes")
-    stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
-    random.shuffle(stats_list)
-    stats_list.sort(key=lambda el: el[1])
-
-    return stats_list
 
 # def beast_output(node_set, tree_file, num_trees=1e9):
 #     """Same as hdag output, but for BEAST.
