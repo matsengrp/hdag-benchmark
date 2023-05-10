@@ -44,13 +44,14 @@ optdag_final=final_opt_dag
 # python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 2000 -o $dagdir -l $log_prefix -f $optdag_final
 
 # NOTE: Saves single results list for MP trimmed node support
-# python ../support_pipeline_scripts/cli.py save_supports -m "hdag" -t $ctree -i $optdag_final -o $dagdir/results.pkl
+python ../support_pipeline_scripts/cli.py save_supports -m "hdag-adj" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/adjusted_support_results.pkl
+python ../support_pipeline_scripts/cli.py save_supports -m "hdag-inf" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl
 
 # NOTE: Tests different trimming strategies for uniform node support.
 # python ../support_pipeline_scripts/cli.py trim_thresholds -t $ctree -i $optdag_final -o $dagdir/strat_dict.pkl
 
 # NOTE: Tests different weighting schemes for generalized node support.
-python ../support_pipeline_scripts/cli.py test_pars_weights -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/strat_dict_node_weight.pkl
+# python ../support_pipeline_scripts/cli.py test_pars_weights -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/strat_dict_node_weight.pkl
 echo ""
 echo ""
 
