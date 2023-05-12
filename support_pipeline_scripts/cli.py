@@ -873,8 +873,8 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
             "-c", f"{round(int(count)/2)}",
             "-o", f"{out_dir}/opt_dag_1.pb",
             "-l", f"{log_dir}_1",
-            "--move-coeff-nodes", str(3),
-            "--move-coeff-pscore", str(1),
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(0),
             "--sample-any-tree"
             ]
     if refseqfile is not None:

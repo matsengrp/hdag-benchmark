@@ -46,6 +46,14 @@ for clade in $(cat clades.txt); do
 
     outdir=$cladedir/figures/$method
     mkdir -p $outdir
+    python support_pipeline_scripts/cli.py clade_results \
+    -n $num_trials \
+    -c $cladedir \
+    -m $method \
+    -r results.pkl \
+    -o $outdir/CA_support.png
+
+    # NOTE: This code generates estimated supports for adjustment
     # python support_pipeline_scripts/cli.py clade_results \
     # -n $num_trials \
     # -c $cladedir \
@@ -54,14 +62,16 @@ for clade in $(cat clades.txt); do
     # -o $outdir/CA_adjusted_support.png
     # -r results.pkl \
     # -o $outdir/CA_support.png
-    sample_size=0.35
-    python support_pipeline_scripts/cli.py clade_results_random_scaling \
-    -n $num_trials \
-    -c $cladedir \
-    -m $method \
-    -r results.pkl \
-    -s $sample_size \
-    -o $outdir/CA_support_random_scaling_s=$sample_size-r=0.5-1.png
+
+    # NOTE: This code randomly scales some estimated supports
+    # sample_size=0.35
+    # python support_pipeline_scripts/cli.py clade_results_random_scaling \
+    # -n $num_trials \
+    # -c $cladedir \
+    # -m $method \
+    # -r results.pkl \
+    # -s $sample_size \
+    # -o $outdir/CA_support_random_scaling_s=$sample_size-r=0.5-1.png
 
     # python support_pipeline_scripts/cli.py pars_weight_clade_results -n $num_trials -c $cladedir -o $outdir -m $method
 done
