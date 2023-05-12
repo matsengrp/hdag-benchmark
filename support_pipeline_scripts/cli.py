@@ -1,8 +1,5 @@
 import click
 import re
-import historydag as hdag
-from historydag.parsimony import load_fasta, build_tree, disambiguate, sankoff_upward
-from itertools import islice
 import ete3 as ete
 import random
 import pickle
@@ -22,10 +19,9 @@ import math
 import time
 from collections import Counter
 
-# TODO: Uncomment this later
-# from hdb.newick_parser.tree_transformer import iter_nexus_trees
+import historydag as hdag
 from historydag import parsimony_utils
-from historydag.parsimony import parsimony_score, sankoff_upward
+from historydag.parsimony import parsimony_score, sankoff_upward, build_tree, sankoff_upward
 from historydag.utils import count_labeled_binary_topologies
 
 import seaborn as sns
@@ -250,7 +246,6 @@ def save_supports(method, tree_path, input_path, output_path):
     # Computes list of node supports
     if method == "hdag":
         support_list = hdag_output(node_set, input_path, taxId2seq)
-    
     elif method[0:5] == "hdag-":
         if method[5:] == "inf":
             p = "inf"
@@ -262,16 +257,13 @@ def save_supports(method, tree_path, input_path, output_path):
             p = float(method[5:])
             adjust = False
         support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)
-
     elif method == "mrbayes":
         support_list = mrbayes_output(node_set, input_path)
     elif method == "beast":
         # support_list = beast_output(node_set, input_path)
         raise Exception("BEAST inference is currently not supported.")
-    
     elif method == "random":
         support_list = random_output(node_set, input_path)
-
     else:
         raise Exception(f"Invalid method: {method}")
 
@@ -874,20 +866,20 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
     """
 
     # # Cast a wide net by prioritizing new nodes only
-    # print("Running initial iterations of larch-usher...")
-    # subprocess.run(["mkdir", "-p", f"{log_dir}_1"])
-    # args = [executable,
-    #         "-i", f"{input}",
-    #         "-c", f"{round(int(count)/2)}",
-    #         "-o", f"{out_dir}/opt_dag_1.pb",
-    #         "-l", f"{log_dir}_1",
-    #         "--move-coeff-nodes", str(1),
-    #         "--move-coeff-pscore", str(0),
-    #         "--sample-any-tree"
-    #         ]
-    # if refseqfile is not None:
-    #     args.extend(["-r", refseqfile])
-    # subprocess.run(args=args)
+    print("Running initial iterations of larch-usher...")
+    subprocess.run(["mkdir", "-p", f"{log_dir}_1"])
+    args = [executable,
+            "-i", f"{input}",
+            "-c", f"{round(int(count)/2)}",
+            "-o", f"{out_dir}/opt_dag_1.pb",
+            "-l", f"{log_dir}_1",
+            "--move-coeff-nodes", str(3),
+            "--move-coeff-pscore", str(1),
+            "--sample-any-tree"
+            ]
+    if refseqfile is not None:
+        args.extend(["-r", refseqfile])
+    subprocess.run(args=args)
 
     # Start considering parsimonious moves
     subprocess.run(["mkdir", "-p", f"{log_dir}_2"])
@@ -897,7 +889,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
             "-o", f"{out_dir}/opt_dag_2.pb",
             "-l", f"{log_dir}_2",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str('-01'),
+            "--move-coeff-pscore", str(1),
             # "--sample-best-tree"
             ]
     subprocess.run(args=args)
@@ -910,7 +902,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
             "-o", f"{out_dir}/opt_dag_3.pb",
             "-l", f"{log_dir}_3",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str('-03'),
+            "--move-coeff-pscore", str(3),
             "--sample-any-tree"
             ]
     subprocess.run(args=args)
@@ -1365,7 +1357,10 @@ def clade_results_random_scaling(clade_dir, out_path, num_sim, method, window_pr
     random.shuffle(results_full)
     results_full.sort(key=lambda el: el[1])
 
-    window_size = int(len(results_full) * window_proportion)
+    if method == "mrbayes":
+        window_size = 500
+    else:
+        window_size = int(len(results_full) * window_proportion)
 
     print(f"\tgenerating window plot at {out_path}...")
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
@@ -1644,7 +1639,7 @@ def pars_weight_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
 
 
 
-
+# TODO: This could be MUCH more efficiently
 def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
 
