@@ -343,6 +343,28 @@ def hdag_output(node_set, pb_file, taxId2seq):
     return stats_list
 
 
+def get_mrbayes_trees(trees_file):
+    with open(trees_file, 'r') as fh:
+        for line in fh:
+            if 'translate' in line:
+                break
+        translate_dict = {}
+        for line in fh:
+            idx, idx_name = line.strip().split(' ')
+            translate_dict[idx] = idx_name[:-1]
+            if idx_name[-1] == ';':
+                break
+
+    with open(trees_file, 'r') as fh:
+        for line in fh:
+            if 'tree' in line.strip()[0:5]:
+                nwk = line.strip().split(' ')[-1]
+                tree = build_tree(nwk, translate_dict)
+                for node in tree.iter_leaves():
+                    node.name = translate_dict[node.name]
+                # put original ambiguous sequences back on leaves
+                yield tree
+
 def get_trprobs_trees(trprobs_file):
     with open(trprobs_file, 'r') as fh:
         for line in fh:
@@ -425,7 +447,7 @@ def make_stats_list(node2support, node_set):
 def mrbayes_output(node_set, tree_file):
     """Same as hdag output, but for MrBayes"""
     node2support = {}
-    for tree in get_trprobs_trees(tree_file):
+    for tree_count, tree in enumerate(get_mrbayes_trees(tree_file)):
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
         node2cu = {}
         curr_internal_name = 0
@@ -445,7 +467,10 @@ def mrbayes_output(node_set, tree_file):
                 node2support[cu] = 0
             # The unrooted topologies in trprobs are unique, so we don't need
             # to worry about uniqueness when rerooting them:
-            node2support[cu] += tree.prob
+            node2support[cu] += 1
+
+    for node, count in node2support.items():
+        node2support[node] = count / tree_count
 
     return make_stats_list(node2support, node_set)
 
