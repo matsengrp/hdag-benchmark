@@ -34,18 +34,18 @@ seedtree=$dagdir/seedtree.pb
 mkdir -p $dagdir/opt_info
 
 # TODO: Uncomment this when you want to search for new trees ---v
-# echo "===> create tree with UShER..."
 # $ctreevcf contains the ancestral sequence and all the other simulated sequences
-# usher-sampled -v $ctreevcf -t $starttree -o $seedtree  --optimization_minutes=0 -d $dagdir/opt_info
+echo "===> create tree with UShER..."
+usher-sampled -v $ctreevcf -t $starttree -o $seedtree  --optimization_minutes=0 -d $dagdir/opt_info
 
 optdag_final=final_opt_dag
 
-# echo "===> lusher optimizing..."
-# log_prefix=$dagdir/opt_info/optimization_log
-# python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 2000 -o $dagdir -l $log_prefix -f $optdag_final
+echo "===> lusher optimizing..."
+log_prefix=$dagdir/opt_info/optimization_log
+python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 2000 -o $dagdir -l $log_prefix -f $optdag_final
 
 # NOTE: Saves single results list for MP trimmed node support
-python ../support_pipeline_scripts/cli.py save_supports -m "hdag-adj" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/adjusted_support_results.pkl
+# python ../support_pipeline_scripts/cli.py save_supports -m "hdag-adj" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/adjusted_support_results.pkl
 python ../support_pipeline_scripts/cli.py save_supports -m "hdag-inf" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl
 
 # NOTE: Tests different trimming strategies for uniform node support.

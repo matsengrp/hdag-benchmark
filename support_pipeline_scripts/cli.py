@@ -1,23 +1,28 @@
 import click
 import re
-import historydag as hdag
-from historydag.parsimony import load_fasta, build_tree, disambiguate, sankoff_upward
-from itertools import islice
 import ete3 as ete
 import random
 import pickle
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
 import os
-import dendropy
 import json
 
 import random
 import subprocess
+
 # from newick_parser.tree_transformer import iter_nexus_trees
 from historydag import parsimony_utils
-
 from math import exp
+import math
+import time
+from collections import Counter
+
+import historydag as hdag
+from historydag import parsimony_utils
+from historydag.parsimony import parsimony_score, sankoff_upward, build_tree, sankoff_upward
+from historydag.utils import count_labeled_binary_topologies
 
 import seaborn as sns
 sns.set_theme()
@@ -55,13 +60,16 @@ def parse_clade_stats(in_file):
                 print(name, "\t", leaf_count)
 
 
-
-@click.command("get_pars_score")
+@click.command("get_tree_stats")
 @click.option('--sim_dir', '-s', help='the folder containing TOI and fasta file.')
-def get_pars_score(sim_dir):
+def get_tree_stats(sim_dir):
     """
     Computes the parsimony score of the simulated tree, the maximum possible parsimony given the
     topology, and the maximum parsimony on the leaves. Stores results as a json at sim_dir/tree_stats.json
+
+    Also computes statistics for the subsetted USHER tree. This can be useful for ensuring that
+    the simulations roughly match the real data. This script assumes the directory `sim_dir/..`
+    contains the USHER-subsetted newick tree tree.n.nwk.
     """
 
     var_sites_prefix = sim_dir + "/collapsed_simulated_tree.nwk.variant_sites"
@@ -84,24 +92,27 @@ def get_pars_score(sim_dir):
         for line in var_sites:
             f.write(f"{line}")
 
-    # This ouputs to simdir/dnapars_output.txt
-    subprocess.run([
-        "dnapars_parsimony_score.sh",
-        var_sites_prefix + "_with_refseq.fasta",    # infasta
-        name,                                       # root_name
-        sim_dir                                     # out_dir
-    ])
+    # TODO: Removed for large clades. Check if clade is too large. If so, then don't do this...
+    # subprocess.run([
+    #     "dnapars_parsimony_score.sh",
+    #     var_sites_prefix + "_with_refseq.fasta",    # infasta
+    #     name,                                       # root_name
+    #     sim_dir                                     # out_dir
+    # ])
 
-    with open(sim_dir + "/dnapars_output.txt", "r") as f:
-        line = f.readline()
-        temp = line.strip().split(" ")
-        best_possible = float(temp[-1])
+    # with open(sim_dir + "/dnapars_output.txt", "r") as f:
+    #     line = f.readline()
+    #     temp = line.strip().split(" ")
+    #     best_possible = float(temp[-1])
+    best_possible = -1
 
-
-
-    from historydag.parsimony import parsimony_score, sankoff_upward
     tree_path = sim_dir + "/collapsed_simulated_tree.nwk"
     tree = ete.Tree(tree_path) # Doesn't have internal names
+
+    multifurc_counts = Counter()
+    for node in tree.traverse():
+        if not node.is_leaf():
+            multifurc_counts[len(node.children)] += 1
 
     fasta_path = sim_dir + "/ctree_with_refseq.fasta"   # ancestral seq in second line of this file
     with open(fasta_path, "r") as f:
@@ -150,12 +161,51 @@ def get_pars_score(sim_dir):
         "num_nodes": num_nodes,
         "pars_score": tree_score,
         "max_score_top": max_score,
-        "max_score_data": best_possible
+        "max_score_data": best_possible,
+        "multifurc_distribution": multifurc_counts
     }
+
+    # Add similar stats from the USHER tree
+    clade_dir = sim_dir.split("/")[0] # TODO: Change this back pls
+    usher_tree_path = clade_dir + "/tree.n.nwk"
+    print("usher tree path:", usher_tree_path)
+    usher_tree = ete.Tree(usher_tree_path, format=1)
+    # Remove multifurcations
+    to_delete = []
+    for node in usher_tree.traverse():
+        # TODO: Add leaf check elsewhere as needed
+        if not node.is_root() and node.dist==0:
+            to_delete.append(node)
+    for node in to_delete:
+        node.delete(prevent_nondicotomic=False)
+    # Remove unifurcations
+    to_delete = [node for node in usher_tree.traverse() if len(node.children) == 1 and not node.is_root()]
+    for node in to_delete:
+        node.delete(prevent_nondicotomic=False)
+
+    pars = 0
+    multifurc_counts = Counter()
+    node_count = 0
+    leaf_count = 0
+    for node in usher_tree.traverse():
+        node_count += 1
+        if node.is_leaf():
+            leaf_count += 1
+        if not node.is_root():
+            pars += node.dist
+        if not node.is_leaf():
+            multifurc_counts[len(node.children)] += 1
+    
+    stats_dict["usher_num_leaves"] = leaf_count
+    stats_dict["usher_num_nodes"] = node_count
+    stats_dict["usher_pars_score"] = pars
+    stats_dict["usher_multifurc_distribution"] = multifurc_counts
+
+
 
     outfile = sim_dir + "/tree_stats.json"
     with open(outfile, "w") as f:
-        f.write(json.dumps(stats_dict))
+        f.write(json.dumps(stats_dict, indent=4))
 
 
 
@@ -172,12 +222,19 @@ def get_pars_score(sim_dir):
 def save_supports(method, tree_path, input_path, output_path):
     """
     A method for computing, formatting, and saving node supports for various methods of inference 
-    Input:  method of inference (e.g., hdag, beast, etc.),
+    Input:  method of inference (e.g., hdag, beast, dag-inf, hdag-adj, etc.),
             input file path (e.g., to history dag, or beast output),
             output filepath 
     Output: For each file in the input directory, a text file containing list of support values in the
             format (clade, estimated_support, in_tree)
-    """
+
+    E.g.
+    python support_pipeline_scripts/cli.py save_supports \
+    -m hdag-inf \
+    -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/simulation/collapsed_simulated_tree.nwk \
+    -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/final_opt_dag.pb \
+    -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/results_adj.pkl
+        """
 
     # Map of taxon id (e.g., s1, s4, etc) to full sequence
     fasta_path = tree_path + ".fasta"
@@ -186,22 +243,33 @@ def save_supports(method, tree_path, input_path, output_path):
     # Compute the set of nodes that are in the true tree
     node_set = get_true_nodes(tree_path)
 
-    # Computes list of nodes 
+    # Computes list of node supports
     if method == "hdag":
         support_list = hdag_output(node_set, input_path, taxId2seq)
-    
     elif method[0:5] == "hdag-":
         if method[5:] == "inf":
             p = "inf"
+            adjust = False
+        elif method[5:] == "adj":
+            p = "inf"
+            adjust = True
         else:
             p = float(method[5:])
-        support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p)
-    elif method == "beast":
-        support_list = beast_output(node_set, input_path)
+            adjust = False
+        support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)
     elif method == "mrbayes":
         support_list = mrbayes_output(node_set, input_path)
+    elif method == "beast":
+        # support_list = beast_output(node_set, input_path)
+        raise Exception("BEAST inference is currently not supported.")
+    elif method == "random":
+        support_list = random_output(node_set, input_path)
     else:
         raise Exception(f"Invalid method: {method}")
+
+    # NOTE: Some
+    # support_list = [result for result in support_list if result[1] > 0]
+    print(len([result for result in support_list if result[1] == 0]), "nodes with 0 support")
 
     with open(output_path, "wb") as f:
         pickle.dump(support_list, f)
@@ -229,9 +297,9 @@ def get_true_nodes(tree_path):
     return set([v for k, v in etenode2cu.items()])
 
 
-def hdag_output_general(node_set, pb_file, taxId2seq, pars_weight="inf"):
+def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=False, adjust=False):
     """
-    Uses a generalized node support that considers non-MP trees and weights them as a functions
+    Uses a generalized node support that can consider non-MP trees and weights them as a functions
     of their parsiomny score.
 
     Returns a list of tuples (clade_id, estimated_support, in_tree). The list is sorted by
@@ -239,31 +307,52 @@ def hdag_output_general(node_set, pb_file, taxId2seq, pars_weight="inf"):
 
     Args:
         node_set: Set of nodes (sets of taxa ids) that are in the true tree.
-        pb_file: Protobuf file that contains the optimized DAG.
+        inp: Otimized DAG or a protobuf file to the optimized DAG. WARNING: dag input may be
+            mutated.
         taxId2Seq: Dicitonary of taxon IDs to the sequences they represent
         pars_weight: Constant to multiply by in the pscore_fn. If `inf`, then use uniform
             distribution over MP trees. Otherwise, support for edge (n1, n2) is computed as
             exp(-<pars_weight> * <pars(n1, n2)>)
+        bifurcate: Whether to compute support with respect to all compatible bifurcating trees in
+            the hDAG.
+        adjust: Whether to use adjusted node support
     """
 
-    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
+    print(f"=> Parsiomny score weight: k={pars_weight}")
 
-    # TODO: Try creating plots without these
-    # dag.make_complete()
+    if isinstance(inp, str):
+        dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(inp)
+    else:
+        dag = inp
+
+    dag.make_complete()
     dag.convert_to_collapsed()
 
-    if pars_weight == "inf":
+    if isinstance(pars_weight, str):
         # This recovers uniform distribution over MP trees
         dag.trim_optimal_weight()
-        pscore_fn = lambda n1, n2: 0
+        pscore_fn = lambda n1, n2: 1
     else:
-        pscore_fn = lambda n1, n2: pars_weight #-pars_weight * parsimony_utils.hamming_cg_edge_weight(n1, n2)
+        pscore_fn = lambda n1, n2: -pars_weight * parsimony_utils.hamming_cg_edge_weight(n1, n2)
 
-    print("\n\tDAG contains", dag.count_trees(), "trees\n")
-        
-    dag.probability_annotate(lambda n1, n2: pscore_fn(n1, n2), log_probabilities=True)
-    support = dag.node_probabilities(log_probabilities=True, collapse_key=lambda n: n.clade_union())
+    print("=> DAG contains", dag.count_trees(), "trees")
 
+    if bifurcate:
+        def bifurcation_correction(node):
+            if len(node.clades) > 2:
+                return count_labeled_binary_topologies(len(node.clades))
+            else:
+                return 1
+        dag.probability_annotate(lambda n1, n2: bifurcation_correction(n2), log_probabilities=False)
+        log_prob = False
+    else:
+        dag.probability_annotate(lambda n1, n2: pscore_fn(n1, n2), log_probabilities=True)
+        log_prob = True
+
+    if adjust:
+        support = dag.adjusted_node_probabilities(log_probabilities=log_prob, collapse_key=lambda n: n.clade_union(), mut_type="site")
+    else:
+        support = dag.node_probabilities(log_probabilities=log_prob, collapse_key=lambda n: n.clade_union())
 
     seq2taxId = {v: k for k, v in taxId2seq.items()}
 
@@ -272,45 +361,43 @@ def hdag_output_general(node_set, pb_file, taxId2seq, pars_weight="inf"):
     node2stats = {}
 
     # Get the support for all dag nodes
-    counter = 0
     for node in support:
-        if len(node) == 1:  # UA node
+        if len(node) <= 1:  # UA node and leaves
             continue
 
         # Convert cg label to taxon id
         id_node = frozenset([seq2taxId[label.compact_genome.to_sequence()] for label in node])
-        est_sup = exp(support[node])    # NOTE: Using log_probabilities
+        est_sup = (support[node])
+        if log_prob:
+            est_sup = exp(est_sup)
         node2stats[id_node] = (est_sup, id_node in node_set)
     
-
+    # NOTE: 
     # Get the support for all nodes in true tree
-    for id_node in node_set:
-        if id_node not in node2stats.keys() and len(id_node) > 1:
-            node2stats[id_node] = (0, True)
+    # for id_node in node_set:
+    #     if id_node not in node2stats.keys() and len(id_node) > 1:
+    #         node2stats[id_node] = (0, True)
 
-    print("Considering", len(node2stats), "nodes")
+    print("=> Considering", len(node2stats), "internal DAG nodes")
     stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
     random.shuffle(stats_list)
     stats_list.sort(key=lambda el: el[1])
 
     return stats_list
 
-
+# TODO: Remove in favor of hdag_ouput general
 def hdag_output(node_set, pb_file, taxId2seq):
     """
     Returns a list of tuples (clade_id, estimated_support, in_tree). The list is primarily
     sorted by estimated support, and portions that have the same support are randomly shuffled
     """
+    raise Warning("The function `hdag_output` is deprecated in favor of hdag_output_general")
     dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
     dag.make_complete()
+    dag.convert_to_collapsed()
     dag.trim_optimal_weight() # Trim to the MP trees
-    counts = dag.count_nodes(collapse=True) # TODO: double check that this is counting the right thing
+    counts = dag.count_nodes(collapse=True)
     total_trees = dag.count_trees()
-    
-
-    print("size of counts is:", len(counts))
-    print(f"There are {len(node_set)} nodes in TOI")
-    dag.summary()
 
     seq2taxId = {v: k for k, v in taxId2seq.items()}
 
@@ -321,7 +408,7 @@ def hdag_output(node_set, pb_file, taxId2seq):
     # Get the support for all dag nodes
     counter = 0
     for node in counts:
-        if len(node) == 0:  # UA node
+        if len(node) <= 1:  # UA node
             continue
 
         # Convert cg label to taxon id
@@ -332,7 +419,7 @@ def hdag_output(node_set, pb_file, taxId2seq):
 
     # Get the support for all nodes in true tree
     for id_node in node_set:
-        if id_node not in node2stats.keys():
+        if id_node not in node2stats.keys() and len(id_node) > 1:
             node2stats[id_node] = (0, True)
 
     print("Considering", len(node2stats), "nodes")
@@ -475,49 +562,43 @@ def mrbayes_output(node_set, tree_file):
     return make_stats_list(node2support, node_set)
 
         
-def beast_output(node_set, tree_file, num_trees=1e9):
-    """Same as hdag output, but for BEAST.
+def random_output(node_set, tree_file):
+    """Same as hdag output, but for randomly generated file of ete trees.
     
     Command to test this on A.2.2/1:
-python support_pipeline_scripts/cli.py save_supports \
--m "beast" \
--t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" \
--i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" \
--o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results.pkl"
-    
+        python support_pipeline_scripts/cli.py save_supports \
+        -m "random" \
+        -t "/fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/1/simulation/collapsed_simulated_tree.nwk" \
+        -i "/fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/1/results/random/random_trees.trees" \
+        -o "/fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/1/results/random/results.pkl"
     """
-
-    # Precompute number of trees in BEAST run
-    print("Counting number of lines...")
-    num_lines = sum(1 for line in open(tree_file, "r")) # TODO: Figure out how to compute this more efficiently
-    print("\tDone!")
     
-    num_trees = num_lines
-    burn_in = int(0.1 * num_trees)
-    print(f"BEAST file has ~{num_trees} trees")
+    import random
+    leaves = [list(set(cu))[0] for cu in node_set if len(cu) == 1]
+    tree_list=[]
+    for i in range(200):
+        if i % 1000 == 0:
+            print(i)
+        t = ete.Tree()
+        random.shuffle(leaves)
+        t.populate(len(leaves), names_library=leaves)
+        tree_list.append(f"{t.write(format=9)}\n")
+        
+    
+    with open(tree_file, "w") as f:
+        f.writelines(tree_list)
 
 
     total_trees = 0
     node2count = {}
-    for i, tree in enumerate(iter_nexus_trees(tree_file)):
-        if i % int(num_trees / 1000) == 0:
-            print(f"\t{i} / {num_trees}")
-        
-        if i < burn_in:
-            continue
-
-        if i == burn_in:
-            print(f"Finished burn-in. Considering approx {num_trees - burn_in} more trees.")
-
-        # TODO: For smaller output debugging
-        # if i > burn_in:
-        #     break
-        
-        rerooted = reroot(tree.search_nodes(name="ancestral")[0])
+    f = open(tree_file, "r")
+    for i, line in enumerate(f.readlines()):
+        nw_str = line.strip()
+        tree = ete.Tree(nw_str, format=9)
 
         node2cu = {}
         curr_internal_name = 0
-        for node in rerooted.traverse("postorder"):
+        for node in tree.traverse("postorder"):
             if node.is_leaf():
                 cu = [node.name]
             else:
@@ -536,6 +617,7 @@ python support_pipeline_scripts/cli.py save_supports \
 
     node2support = {}
     for node, count in node2count.items():
+        # NOTE: This is a debugging check
         if count > total_trees:
             print(f"=> Count is {count} with {total_trees} trees")
             print("Node")
@@ -543,6 +625,126 @@ python support_pipeline_scripts/cli.py save_supports \
         node2support[node] = count / total_trees
 
     return make_stats_list(node2support, node_set)
+
+
+# def beast_output(node_set, tree_file, num_trees=1e9):
+#     """Same as hdag output, but for BEAST.
+    
+#     Command to test this on A.2.2/1:
+#         python support_pipeline_scripts/cli.py save_supports \
+#         -m "beast" \
+#         -t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" \
+#         -i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" \
+#         -o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results.pkl"
+    
+#     """
+
+#     # Precompute number of trees in BEAST run
+#     print("Counting number of lines...")
+#     num_lines = sum(1 for line in open(tree_file, "r")) # TODO: Figure out how to compute this more efficiently
+#     print("\tDone!")
+    
+#     num_trees = num_lines
+#     burn_in = int(0.1 * num_trees)
+#     print(f"BEAST file has ~{num_trees} trees")
+#     TODO: Put this in a utils file
+#     def reroot(new_root):
+#         """
+#         Edits the tree that the given node, new_root, is a part of so that it becomes the root.
+#         Returns pointer to the new root. Also, removes any unifurcations caused by edits.
+#         """
+#         node_path = [new_root]
+#         curr = new_root
+#         while not curr.is_root():
+#             node_path.append(curr.up)
+#             curr = curr.up
+
+#         root = node_path[-1]
+#         delete_root = len(root.children) <= 2
+        
+#         while len(node_path) >= 2:
+#             curr_node = node_path[-1]
+#             curr_child = node_path[-2]
+#             curr_child.detach()
+#             curr_child.add_child(curr_node)
+#             node_path = node_path[:-1]
+#         if delete_root:
+#             root.delete()
+
+#         # NOTE: Need to delete new root's child because it will be a unifurcation
+#         list(curr_child.children)[0].delete()
+
+#         return curr_child
+
+#     total_trees = 0
+#     node2count = {}
+#     for i, tree in enumerate(iter_nexus_trees(tree_file)):
+#         if i % int(num_trees / 1000) == 0:
+#             print(f"\t{i} / {num_trees}")
+        
+#         if i < burn_in:
+#             continue
+
+#         if i == burn_in:
+#             print(f"Finished burn-in. Considering approx {num_trees - burn_in} more trees.")
+
+#         # TODO: For smaller output debugging
+#         # if i > burn_in:
+#         #     break
+        
+#         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
+
+#         node2cu = {}
+#         curr_internal_name = 0
+#         for node in rerooted.traverse("postorder"):
+#             if node.is_leaf():
+#                 cu = [node.name]
+#             else:
+#                 node.name = f"internal{curr_internal_name}"
+#                 curr_internal_name += 1
+#                 cu = []
+#                 for child in node.children:
+#                     cu.extend(list(node2cu[child.name]))
+            
+#             cu = frozenset(cu)
+#             node2cu[node.name] = cu
+#             if cu not in node2count:
+#                 node2count[cu] = 0
+#             node2count[cu] += 1
+#         total_trees += 1
+
+#     node2support = {}
+#     for node, count in node2count.items():
+#         if count > total_trees:
+#             print(f"=> Count is {count} with {total_trees} trees")
+#             print("Node")
+#             print(node)
+#         node2support[node] = count / total_trees
+
+
+#     # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
+#     # support and whether that node is in the true tree or not
+#     node2stats = {}
+
+#     # Get the support for all dag nodes
+#     counter = 0
+#     for id_node, est_sup in node2support.items():
+#         if len(id_node) == 0:  # UA node
+#             continue
+
+#         node2stats[id_node] = (est_sup, id_node in node_set)
+    
+#     # Get the support for all nodes in true tree
+#     for id_node in node_set:
+#         if id_node not in node2stats.keys():
+#             node2stats[id_node] = (0, True)
+
+#     print("Considering", len(node2stats), "nodes")
+#     stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
+#     random.shuffle(stats_list)
+#     stats_list.sort(key=lambda el: el[1])
+
+#     return stats_list
 
 
 @click.command("trim_thresholds")
@@ -623,20 +825,143 @@ def test_pars_weights(tree_path, pb_file, output_path):
     Given a path to a completed hDAG (e.g., data/A.2.2/1/results/historydag/final_opt_dag.pb)
     store results.pkls for various parsiomny weightings
     """
-
+    start = time.time()
     fasta_path = tree_path + ".fasta"
     taxId2seq = hdag.parsimony.load_fasta(fasta_path)
     node_set = get_true_nodes(tree_path)
+    print("\n\nloading fasta and node_set took", time.time()-start, "seconds.\n\n")
 
     weight_dict = {}
-    pweight = [0, 1, 2, 3, 4, 10, 1e2, 1e3, 1e5, 1e10, "inf"] # Proportion of parsimony to trim to
+    pweight = [-2, -1, -0.5, 0, 0.1, 0.5, 1, 2, "inf"] # Proportion of parsimony to trim to
+
+    # print("Loading MAD...")
+    # start = time.time()
+    # dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(pb_file)
+    # print(f"\t Took {(time.time() - start)/60} minutes")
+    # TODO: ^ Can we save having to load this thing multiple times
+
+
+    start = time.time()
     for p in pweight:
-        stats_list = hdag_output_general(node_set, pb_file, taxId2seq, pars_weight=p)
+        stats_list = hdag_output_general(node_set, pb_file, taxId2seq, pars_weight=p, bifurcate=pweight == "bif")
         weight_dict[p] = (p, stats_list)
+    print("\n\nEntire run of test_pars_weight took", time.time()-start, "seconds.\n")
 
     with open(output_path, "wb") as f:
         pickle.dump(weight_dict, f)
 
+
+# TODO: make "--move-coeff-pscore" positive
+@click.command("larch_usher")
+@click.option('--executable', '-e', default='/home/whowards/larch/larch/build/larch-usher', help='path to pre-made larch-usher executable')
+@click.option('--input', '-i', help='input tree or hdag. if tree, need refseqfile.')
+@click.option('--refseqfile', '-r', default=None, help='number of .')
+@click.option('--count', '-c', help='number of iterations.')
+@click.option('--out_dir', '-o', help='the directory for where to store resulting dag protobufs.')
+@click.option('--final_dag_name', '-f', default='final_opt_dag')
+@click.option('--schedule', '-s', default="annealed")
+@click.option('--log_dir', '-l')
+@click.option('--pars_score', '-p', default=1)
+@click.option('--node_score', '-n', default=1)
+def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, schedule, log_dir, pars_score, node_score):
+    """Python CLI for driving larch-usher
+    
+    E.g.,
+        larch_usher \
+        -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/results/historydag/opt_dag_3.pb \
+        -c 2000 \
+        -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/results/historydag \
+        -l /fh/fast/matsen_e/whowards/hdag-benchmark/data/A.2.5/1/results/historydag/opt_info
+    """
+
+    # E.g., results/historydag/
+    os.chdir(f"{out_dir}")
+    # subprocess.run(["cd", out_dir]) # One process can't change anothers working dir
+
+    if int(count) <= 2:
+        raise Exception("Not enough iterations")
+        return
+
+    """
+    # Test command
+    cd /fh/fast/matsen_e/whowards/hdag-benchmark/data/A/1/results/historydag;
+    /home/whowards/larch/larch/build/larch-usher -i complete_opt_dag.pb -c 20 -o ../historydag \
+    --move-coeff-nodes 1 \
+    --move-coeff-pscore 3 \
+    -l optimization_log_complete
+    """
+
+    # # Cast a wide net by prioritizing new nodes only
+    print("Running initial iterations of larch-usher...")
+    subprocess.run(["mkdir", "-p", f"{log_dir}_1"])
+    args = [executable,
+            "-i", f"{input}",
+            "-c", f"{round(int(count)/2)}",
+            "-o", f"{out_dir}/opt_dag_1.pb",
+            "-l", f"{log_dir}_1",
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(0),
+            "--sample-any-tree"
+            ]
+    if refseqfile is not None:
+        args.extend(["-r", refseqfile])
+    subprocess.run(args=args)
+
+    # Start considering parsimonious moves
+    subprocess.run(["mkdir", "-p", f"{log_dir}_2"])
+    args = [executable,
+            "-i", f"{out_dir}/opt_dag_1.pb",
+            "-c", f"{round(int(count)/6)}",
+            "-o", f"{out_dir}/opt_dag_2.pb",
+            "-l", f"{log_dir}_2",
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(1),
+            # "--sample-best-tree"
+            ]
+    subprocess.run(args=args)
+
+    # Emphasize parsimony over new nodes
+    subprocess.run(["mkdir", "-p", f"{log_dir}_3"])
+    args = [executable,
+            "-i", f"{out_dir}/opt_dag_2.pb",
+            "-c", f"{round(int(count)/6)}",
+            "-o", f"{out_dir}/opt_dag_3.pb",
+            "-l", f"{log_dir}_3",
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str(3),
+            "--sample-any-tree"
+            ]
+    subprocess.run(args=args)
+
+    print("Completing DAG...")
+    start = time.time()
+    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(f"{out_dir}/opt_dag_3.pb")
+    dag.convert_to_collapsed()
+    dag.make_complete()
+    dag.to_protobuf_file(f"{out_dir}/complete_opt_dag.pb")
+    end = time.time()
+    print(f"\tCompletion took {(end - start) / 60} minutes")
+
+    subprocess.run(["mkdir", "-p", f"{log_dir}_complete"])
+    args = [executable,
+            "-i", f"{out_dir}/complete_opt_dag.pb",
+            "-c", f"{round(int(count)/6)}",
+            "-o", f"{out_dir}/{final_dag_name}.pb",
+            "-l", f"{log_dir}_complete",
+            "--move-coeff-nodes", str(1),
+            "--move-coeff-pscore", str('-03')
+            ]
+    subprocess.run(args=args)
+
+
+    # TODO: Add --sample-any again?
+
+
+
+# TODO: Put these functions in their own file
+###################################################################################################
+#### Plotting #####################################################################################
+###################################################################################################
 
 @click.command("agg_pars_weights")
 @click.option('--input', '-i', help='file path to input list as a pickle.')
@@ -692,7 +1017,6 @@ def agg_pars_weights(input, out_dir, clade_name, method, window_proportion=0.20)
 
         window_size = int(len(results) * window_proportion)
 
-        # TODO: Change this to be for complete and complete_collapsed...
         out_path = out_dir + f"/pars_weight_w={window_size}_complete.png"
         x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
@@ -725,10 +1049,10 @@ def bin_pars_weights(input, out_dir, clade_name, method, bin_size):
     for computing support values USING A HISTOGRAM BINNING STRATEGY (AS OPPOSED TO SLIDING WINDOW)
     
     E.g.:
-python support_pipeline_scripts/cli.py bin_pars_weights \
--i /home/whowards/hdag-benchmark/data/A.2.2/1/results/historydag/strat_dict_pars_weight.pkl \
--c A.2.2 \
--o /home/whowards/hdag-benchmark/data/A.2.2/1/figures/historydag
+    python support_pipeline_scripts/cli.py bin_pars_weights \
+    -i /home/whowards/hdag-benchmark/data/A.2.2/1/results/historydag/strat_dict_pars_weight.pkl \
+    -c A.2.2 \
+    -o /home/whowards/hdag-benchmark/data/A.2.2/1/figures/historydag
     """
 
     try:
@@ -848,11 +1172,6 @@ def agg_strats(input, out_dir, clade_name, method, window_proportion=0.20):
         out_path = out_dir + f"/support_quartiles_w={window_size}_strat={strat}.png"
         x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
-        # print("est\ttrue\tQ1\tQ3")
-        # for num, (i, j, k, l) in enumerate(zip(x, y, min_sup, max_sup)):
-        #     print(f"{num}\t{i:3f}\t{j:3f}\t{k:3f}\t{l:3f}")
-        # print(window_size)
-
         f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
         f.set_size_inches(7, 10)
 
@@ -880,109 +1199,58 @@ def agg_strats(input, out_dir, clade_name, method, window_proportion=0.20):
         plt.savefig(out_dir + f"/parsiomny_distribution_for_{strat}.png")
 
 
+@click.command("cumm_pars_weight")
+@click.option('--input', '-i', help="path to input MADAG")
+@click.option('--out_dir', '-o', help="directory path to output plot to")
+@click.option('--parsimony_weight', '-p', default=0.01, help="the coefficient to multiple parsiomny by in the negative exponential")
+def cumm_pars_weight(input, out_dir, parsimony_weight):
+    """
+    Plots the cummulative distribution of tree probability as a function of parsiomny score
+    for various parsimony weightings.
 
-# TODO: Implement a way to detect if you are slowing down, and then add the sample from any tree option
-@click.command("larch_usher")
-@click.option('--executable', '-e', default='/home/whowards/larch/larch/build/larch-usher', help='path to pre-made larch-usher executable')
-@click.option('--input', '-i', help='input tree or hdag. if tree, need refseqfile.')
-@click.option('--refseqfile', '-r', default=None, help='number of .')
-@click.option('--count', '-c', help='number of iterations.')
-@click.option('--out_dir', '-o', help='the directory for where to store resulting dag protobufs.')
-@click.option('--schedule', '-s', default="annealed")
-@click.option('--log_dir', '-l')
-@click.option('--pars_score', '-p', default=1)
-@click.option('--node_score', '-n', default=1)
-def larch_usher(executable, input, refseqfile, count, out_dir, schedule, log_dir, pars_score, node_score):
-    """Python CLI for driving larch-usher"""
+    Roughly, this gives us a sense of the probability of sampling a tree with a given parsimony score or lower.
+    """
 
-    # E.g., results/historydag/
-    os.chdir(f"{out_dir}")
-    # subprocess.run(["cd", out_dir]) # One process can't change anothers working dir
+    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(input)
+    pars_distribution = dag.weight_count()
 
-    if int(count) <= 2:
-        return
+    p_scores = list(pars_distribution.keys())
+    p_scores.sort()
+    cumm_probs = {}
+    print("\t Number of Parsimony scores:", len(p_scores))
+    for k in [-2, -1, -0.5, 0, 0.1, 0.5, 1]:
+        print("\t", k)
+        # dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(input) # TODO: Try getting a fresh copy of the dag.. Doesn't help
+        total_tree_score = dag.probability_annotate(lambda n1, n2: -k * parsimony_utils.hamming_cg_edge_weight(n1, n2), log_probabilities=True)
+        cumm_probs[k] = []
+        for p in p_scores:
+            val = pars_distribution[p] * math.e ** (-k * p) / exp(total_tree_score)
+            if len(cumm_probs[k]) < 1:
+                cumm_probs[k].append(val)
+            else:
+                cumm_probs[k].append(val + cumm_probs[k][-1])
 
-    print("\n\tCurrent directory in python:", out_dir)
+    for k, cumm_prob in cumm_probs.items():
+        plt.plot(p_scores, cumm_probs[k], label=k)
 
-
-    # Cast a wide net by prioritizing new nodes only
-    print("Running initial iterations of larch-usher...")
-    subprocess.run(["mkdir", "-p", f"{log_dir}_1"])
-    args = [executable,
-            "-i", input,
-            "-c", f"{round(int(count)/2)}",
-            "-o", f"{out_dir}/opt_dag_1.pb",
-            "-l", f"{log_dir}_1",
-            "--move-coeff-nodes", str(2),
-            "--move-coeff-pscore", str(1),
-            "--sample-best-tree"            # NOTE: Might need to change this with different version of larch-usher
-            ]
-    if refseqfile is not None:
-        args.extend(["-r", refseqfile])
-    subprocess.run(args=args)
-
-    # Start considering parsimonious moves
-    subprocess.run(["mkdir", "-p", f"{log_dir}_2"])
-    args = [executable,
-            "-i", f"{out_dir}/opt_dag_1.pb",
-            "-c", f"{round(int(count)/6)}",
-            "-o", f"{out_dir}/opt_dag_2.pb",
-            "-l", f"{log_dir}_2",
-            "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(1),
-            "--sample-best-tree"
-            ]
-    subprocess.run(args=args)
-
-    # Emphasize parsimony over new nodes
-    subprocess.run(["mkdir", "-p", f"{log_dir}_3"])
-    args = [executable,
-            "-i", f"{out_dir}/opt_dag_2.pb",
-            "-c", f"{round(int(count)/6)}",
-            "-o", f"{out_dir}/opt_dag_3.pb",
-            "-l", f"{log_dir}_3",
-            "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(3),
-            # "--sample-any-tree"
-            ]
-    subprocess.run(args=args)
-
-    print("Completing DAG...")
-    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(f"{out_dir}/opt_dag_3.pb")
-    dag.make_complete()
-    dag.to_protobuf_file(f"{out_dir}/complete_opt_dag.pb")
-
-    subprocess.run(["mkdir", "-p", f"{log_dir}_complete"])
-    args = [executable,
-            "-i", f"{out_dir}/complete_opt_dag.pb",
-            "-c", f"{round(int(count)/6)}",
-            "-o", f"{out_dir}/final_opt_dag.pb",
-            "-l", f"{log_dir}_complete",
-            "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(3),
-            "--sample-best-tree"
-            ]
-    subprocess.run(args=args)
-
-
-    # TODO: Add --sample-any again?
+    plt.legend()
+    plt.xlabel("Parsimony Score")
+    plt.ylabel("Cummulative Probability Weight")
+    plt.title(f"Cummulative Probability with Parsimony Weight {parsimony_weight}")
+    out_path = out_dir + f"/cumm_prob_k={parsimony_weight}.png"
+    plt.savefig(out_path)
 
 
 
-
-###################################################################################################
-#### Aggregation ##################################################################################
-###################################################################################################
-
-# TODO: Rename this
-@click.command("agg")
+@click.command("coverage_trial_plot")
 @click.option('--input', '-i', help='file path to input list as a pickle.')
 @click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
 @click.option('--method', '-m', default='historydag')
 @click.option('--clade_name', '-c')
 @click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
-def agg(input, out_dir, clade_name, method, window_proportion=0.20):
-    """Given the pickled file, aggregates results for support values"""
+def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.20):
+    """Given the pickled file, aggregates results for support values for a single trial into a
+    coverage analysis plot"""
 
     try:
         with open(input, "rb") as f:
@@ -1004,7 +1272,7 @@ def agg(input, out_dir, clade_name, method, window_proportion=0.20):
     else:
         window_size = int(len(results) * window_proportion)
 
-    out_path = out_dir + f"/support_quartiles_w={window_size}.png"
+    out_path = out_dir + f"/adj_support_quartiles_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
     # print("est\ttrue\tQ1\tQ3")
@@ -1022,7 +1290,7 @@ def agg(input, out_dir, clade_name, method, window_proportion=0.20):
     ax1.scatter(min_sup, y, color="orange", alpha=0.1)
     ax1.scatter(max_sup, y, color="orange", alpha=0.1)
     # ax1.fill_betweenx(y, min_sup, max_sup, alpha=0.2, color="orange", label="Support Range")
-    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect", linestyle="dashed")
     ax1.legend()
     
     ax2.hist(x)
@@ -1035,25 +1303,140 @@ def agg(input, out_dir, clade_name, method, window_proportion=0.20):
 
 @click.command("clade_results")
 @click.option('--clade_dir', '-c', help='path to clade directory.')
-@click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
+@click.option('--out_path', '-o', help='output path to store figures/tables in.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
 @click.option('--num_sim', '-n', default=1, help='number of simulations to average.')
 @click.option('--method', '-m', default='historydag')
 @click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
-def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
+def clade_results(clade_dir, out_path, num_sim, method, window_proportion, results_name):
     """Given the clade directory, performs coverage analysis across all simulations"""
 
-    clade_name = clade_dir.split("/")[-1]
+    results_full = get_results_full(clade_dir, num_sim, method, results_name)
+    window_size = int(len(results_full) * window_proportion)
 
-    # Multi-line Plot
+    print(f"\tgenerating window plot at {out_path}...")
+    x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
+
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
+    f.set_size_inches(7, 9)
+    clade_name = clade_dir.split("/")[-1]
+    ax1.set_title(f"Clade {clade_name} Coverage Analysis")
+
+    ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results_full)})")
+    ax1.plot(x, y, color="orange", label="Support Regressor")
+    ax1.fill_between(x, pos_devs, neg_devs, alpha=0.2, color="orange")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor", linestyle="dashed")
+    ax1.legend()
+    
+    ax2.hist(x)
+    ax2.set_yscale("log")
+    ax2.set_xlabel("Estimated Support")
+    f.savefig(out_path)
+    f.clf()
+    # # Histogram plot
+    # bin_size = 0.05
+    # # Remove leaf nodes
+    # res_no_leaves = []
+    # for el in results_full:
+    #     if len(el[0]) > 1:
+    #         res_no_leaves.append(el)
+    # results = res_no_leaves
+    # out_path = out_dir + f"/pars_weight_binned_{bin_size}.png"
+    # x, y, std_pos, std_neg = bin_hist_plot(results, bin_size=bin_size)
+    # plt.plot(x, y, c="red", label="Our Estimate")
+    # plt.plot(x, std_pos, c="orange", label="Std Dev")
+    # plt.plot(x, std_neg, c="orange")
+    # plt.fill_between(x, std_neg, std_pos, alpha=0.1, color="orange")
+    # plt.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor")
+    # plt.title(f"Clade {clade_name} Binned Coverage Analysis")
+    # plt.ylabel(f"Empirical Probability")
+    # plt.xlabel("Estimated Support")
+    # f.set_size_inches(6.4, 4.8)
+    # plt.legend()
+    # plt.savefig(out_path)
+    # plt.clf()
+
+@click.command("clade_results_random_scaling")
+@click.option('--clade_dir', '-c', help='path to clade directory.')
+@click.option('--out_path', '-o', help='output path to store figures/tables in.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
+@click.option('--num_sim', '-n', default=1, help='number of simulations to average.')
+@click.option('--method', '-m', default='historydag')
+@click.option('--sample_size', '-s', default=0.5, help='proportion of results to randomly scale.')
+@click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
+def clade_results_random_scaling(clade_dir, out_path, num_sim, method, window_proportion, results_name, sample_size):
+    """Given the clade directory, performs coverage analysis across all simulations"""
+
+    # scale_range = (0.75, 0.95)
+    scale_range = (0.5, 1)
+
+    # Randomly scale support values and re-sort
+    results_full = get_results_full(clade_dir, num_sim, method, results_name)
+    print("length of results", len(results_full))
+    results_full_rand = []
+    idxs = random.sample(range(len(results_full)), int(len(results_full) * sample_size))
+    for i, (node, est_sup, in_tree) in enumerate(results_full):
+        if i in idxs:
+            est_sup = est_sup * random.uniform(scale_range[0], scale_range[1])
+        results_full_rand.append((node, est_sup, in_tree))
+    results_full = results_full_rand
+    random.shuffle(results_full)
+    results_full.sort(key=lambda el: el[1])
+
+    if method == "mrbayes":
+        window_size = 500
+    else:
+        window_size = int(len(results_full) * window_proportion)
+
+    print(f"\tgenerating window plot at {out_path}...")
+    x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
+
+    # Plotting code
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
+    f.set_size_inches(7, 9)
+    clade_name = clade_dir.split("/")[-1]
+    ax1.set_title(f"Clade {clade_name} Coverage Analysis")
+    ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results_full)})")
+    ax1.plot(x, y, color="orange", label="Support Regressor")
+    ax1.fill_between(x, pos_devs, neg_devs, alpha=0.2, color="orange")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor", linestyle="dashed")
+    ax1.legend()
+    ax2.hist(x)
+    ax2.set_yscale("log")
+    ax2.set_xlabel("Estimated Support")
+    f.savefig(out_path)
+    f.clf()
+
+
+def get_results_full(clade_dir, num_sim, method, results_name):
+    """
+    Helper method for `clade_results` that aggregates all the results.pkl files for each trial
+    into a single sorted list.
+    """
+
     result_dict = {}
     for trial in range(1, num_sim+1):
         # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
         #   their supports and whether they're in the true tree or not
-        result_path = clade_dir + f"/{trial}/results/{method}/results.pkl"
+        result_path = clade_dir + f"/{trial}/results/{method}/{results_name}"
         
         try:
             with open(result_path, "rb") as f:
                 results = pickle.load(f)
+
+                # NOTE: Removing leaves and UA node here
+                with_leaves = len(results)
+                leaf_in_tree = [int(result[2]) for result in results if len(result[0]) <= 1]
+                leaf_est_sup = [result[1] for result in results if len(result[0]) <= 1]
+                # print(leaf_in_tree[0:10])
+                # print(leaf_est_sup[0:10])
+                results = [result for result in results if len(result[0]) > 1]
+                without_leaves = len(results)
+                if with_leaves != without_leaves:
+                    print(f"==> Removed {with_leaves - without_leaves} leaves \
+                        avg in_tree = {sum(leaf_in_tree) / len(leaf_in_tree)} \
+                        avg est_sup = {sum(leaf_est_sup) / len(leaf_est_sup)}")
+                
                 result_dict[trial] = results
         except:
             print(f"\tSkipping {clade_dir} {trial}")
@@ -1063,49 +1446,20 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
         print("\n==>No results to print :(\n")
         return
 
-    avg_window_size = 0
-    avg_results_length = 0
-    for trial in result_dict.keys():
-        result = result_dict[trial]
-
-        if method == "beast":
-            window_size = 100
-        else:
-            window_size = int(len(result) * window_proportion)
-        
-        avg_window_size += window_size
-        avg_results_length += len(result)
-        x, y = sliding_window_plot(result, window_size=window_size)
-        plt.plot(x, y)
-    
-    avg_results_length /= int(len(result_dict))
-    avg_window_size /= int(len(result_dict))
-
-    plt.plot([0, 1], [0, 1])
-    plt.xlabel("Estimated Support")
-    plt.ylabel(f"Empirical Probability (window_size~{int(avg_window_size)}/{int(avg_results_length)})")
-    plt.title(f"Aggregated {clade_name} Coverage Analysis")
-    out_path = out_dir + f"/multi_line_w={int(avg_window_size)}.png"
-    plt.savefig(out_path)
-    plt.clf()
-
-
-
-    # Single-line Plot
-
     results_full = []
     for trial, results in result_dict.items():
         toi_node_count = 0
         num_leaves = 0
         for result in results:
-            if result[1] > 1.0:
-                print("node length:", len(node))
-                print("trial:", trial)
-                continue
+            # TODO: Why are you doing this??
+            # if result[1] > 1.0:
+            #     print("node length:", len(node))
+            #     print("trial:", trial)
+            #     continue
 
             node = result[0]
             if len(node) > 1:       # Removing leaves
-                results_full.append(result)
+                results_full.append((result[0], result[1], result[2]))
                 if result[2]:
                     toi_node_count += 1
             else:
@@ -1120,32 +1474,7 @@ def clade_results(clade_dir, out_dir, num_sim, method, window_proportion):
     print(f"\tsorting {len(results_full)} results...")
     random.shuffle(results_full)
     results_full.sort(key=lambda el: el[1])
-
-
-    if method == "beast":
-        window_size = 100
-    else:
-        window_size = int(len(results_full) * window_proportion)
-
-    out_path = out_dir + f"/single_line_w={window_size}.png"
-    print(f"\tgenerating window plot at {out_path}...")
-    x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
-
-    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
-    f.set_size_inches(7, 9)
-    ax1.set_title(f"Clade {clade_name} Coverage Analysis")
-
-    ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results_full)})")
-    ax1.plot(x, y, color="orange", label="Support Regressor")
-    ax1.fill_between(x, pos_devs, neg_devs, alpha=0.2, color="orange")
-    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor")
-    ax1.legend()
-    
-    ax2.hist(x)
-    ax2.set_yscale("log")
-    ax2.set_xlabel("Estimated Support")
-    f.savefig(out_path)
-    f.clf()
+    return results_full
 
 
 def bin_hist_plot(results, bin_size=0.05):
@@ -1189,21 +1518,24 @@ def bin_hist_plot(results, bin_size=0.05):
     # print(f"\tx: {x}\ty: {y}")
     return x, y, pos_devs, neg_devs
 
-@click.command("binned_clade_results")
+
+# TODO: Rename this. This plots all parsiomny coefficient coverage analyses on the same plot with
+#       a sliding window.
+@click.command("pars_weight_clade_results")
 @click.option('--clade_dir', '-c', help='path to clade directory.')
 @click.option('--out_dir', '-o', help='output directory to store figures/tables in.')
 @click.option('--num_sim', '-n', default=1, help='number of simulations to average.')
 @click.option('--method', '-m', default='historydag')
 @click.option('--bin_size', '-b', default=0.05, help='the proportion of the data to use as window size')
-def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
-    """Given the clade directory, performs coverage analysis across all simulations"""
+def pars_weight_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
+    """Given the clade directory with a results dictionary, performs coverage analysis across all simulations"""
 
     clade_name = clade_dir.split("/")[-1]
 
     result_dict = {}
     for trial in range(1, num_sim+1):
-        # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
-        #   their supports and whether they're in the true tree or not
+        # Assumes that `path/to/clade/trial/results/method/strat_dict_node_weight.pkl stores``
+        #   list of nodes their supports and whether they're in the true tree or not
         result_path = clade_dir + f"/{trial}/results/{method}/strat_dict_node_weight.pkl"
         
         try:
@@ -1211,32 +1543,59 @@ def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
                 results = pickle.load(f)
                 result_dict[trial] = results
         except:
-            print(f"\tSkipping {clade_dir} {trial}")
+            print(f"\tSkipping {result_path}")
             continue
     
     if len(result_dict) == 0:
         print("\n==> No results to print :(\n")
         return
 
-    results_full = {p: [] for p in result_dict[1].keys()}
+    results_full = {p: [] for p in result_dict[1].keys() if isinstance(p, str) or p <= 4}
     for trial, strat_dict in result_dict.items():
+        # NOTE: First element of results should be p and second element is the results list
         for p, results in strat_dict.items():
-            results_full[p].extend(results[1])
+            if p not in results_full:
+                continue
 
-    
+            results = results[1]
+            
+            # NOTE: Removing all leaves here
+            print(f"p={p}, trial={trial}")
+            with_leaves = len(results)
+            leaf_in_tree = [int(result[2]) for result in results if len(result[0]) <= 1]
+            leaf_est_sup = [result[1] for result in results if len(result[0]) <= 1]
+            results = [result for result in results if len(result[0]) > 1 and result[1] > 0]    # NOTE: Only including nodes in DAG!
+            without_leaves = len(results)
+            if with_leaves != without_leaves:
+                print(f"==> Removed {with_leaves - without_leaves} nodes \
+                    avg in_tree = {sum(leaf_in_tree) / len(leaf_in_tree)} \
+                    avg est_sup = {sum(leaf_est_sup) / len(leaf_est_sup)}")
+            ##
+
+            results_full[p].extend(results)
+
     # print(f"\tsorting {len(results_full)} results...")
     for _, results in results_full.items():
         random.shuffle(results)
         results.sort(key=lambda el: el[1])
 
     bin_size = 0.05
-    plt.plot([0, 1], [0, 1], color="blue", label="Perfect")
-    pweight = [0, 1, 2, 3, 4, 10, 1e2, 1e10, "inf"]
-    colors = ['#fff7ec','#fee8c8','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f', '#000000', '#33a02c']
-    p_cmap = {p: c for p, c in zip(pweight, colors)}
+    plt.plot([0, 1], [0, 1], color="blue", label="Perfect", linestyle='dashed')
+
+    pweight = list(results_full.keys())
+    for val in ["inf", "bif"]:
+        if val in pweight:
+            pweight.remove(val)
+
+    base = 10
+    print(pweight)
+    colors = list(plt.cm.autumn((np.power(base, np.linspace(0, 1, int(max(pweight) * 10) + 1)) - 1) / (base - 1)))
+    colors_neg = list(plt.cm.winter((np.power(base, np.linspace(0, 1, int(-1 * min(pweight) * 10) + 1)) - 1) / (base - 1)))
+    colors.reverse()
+    # colors_neg.reverse()
 
     for p, results in results_full.items():
-        if p not in pweight:
+        if not isinstance(p, str) and p > 10:
             continue
         # Remove leaf nodes
         res_no_leaves = []
@@ -1245,9 +1604,19 @@ def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
                 res_no_leaves.append(el)
         results = res_no_leaves
 
-        out_path = out_dir + f"/single_line_node_weighted_w={200}.png" # f"/pars_weight_binned_{bin_size}.png"
-        x, y, std_pos, std_neg = sliding_window_plot(results, std_dev=True, window_size=200) # bin_hist_plot(results, bin_size=bin_size)
-        plt.plot(x, y, color=p_cmap[p], label=p)
+        out_path = out_dir + f"/single_line_pars_weighted_w={200}.png"
+        x, y, std_pos, std_neg = sliding_window_plot(results, std_dev=True, window_size=200)
+
+        if not isinstance(p, str) and p >= 0:
+            c = colors[int(p*10)]
+        elif not isinstance(p, str) and p < 0:
+            c = colors_neg[int(-1*p*10)]
+        elif p == "inf":
+            c = "green"
+        else:
+            c = "purple"
+        
+        plt.plot(x, y, color=c, label=p)
 
         # TODO: Add these back in once you have a better idea of the correct pweight
         # plt.scatter(min_sup, y, color=p_cmap[p], alpha=0.1)
@@ -1257,11 +1626,46 @@ def binned_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
     plt.title(f"Clade {clade_name} Coverage Analysis with Varying Parsimony Weights")
     plt.ylabel(f"Empirical Probability")
     plt.xlabel("Estimated Support")
-    # plt.legend()
+    plt.legend()
     plt.savefig(out_path)
     plt.clf()
 
+    # Plot stuff about the MP results
+    # for p in results_full.keys():
+    #     results = results_full[p]
 
+    #     num_nodes_in_tree_but_not_dag = sum([result[2] and result[1] == 0 for result in results])
+    #     print("num_nodes_in_tree_but_not_dag =", num_nodes_in_tree_but_not_dag)
+
+    #     # Support distribution
+    #     in_tree_sup = [result[1] for result in results if result[2]]
+    #     out_tree_sup = [result[1] for result in results if not result[2]]
+
+
+    #     plt.hist((in_tree_sup, out_tree_sup), label=("In True Tree","Out True Tree"), color=("Orange", "Blue"))
+    #     plt.ylabel("Count")
+    #     plt.xlabel("Estimated Support")
+    #     plt.legend()
+    #     plt.savefig(out_dir + f"/{p}_support_histogram.png")
+    #     plt.clf()
+
+    #     # Scatter support vs clade size
+    #     in_tree_size = [len(result[0]) for result in results if result[2]]
+    #     out_tree_size = [len(result[0]) for result in results if not result[2]]
+
+    #     plt.scatter(out_tree_size, out_tree_sup, alpha=0.15, c="Blue", label="Out True Tree")
+    #     plt.scatter(in_tree_size, in_tree_sup, alpha=0.3, c="Orange", label="In True Tree")
+    #     plt.ylabel("Estimated Support")
+    #     plt.xlabel("Size")
+    #     plt.legend()
+    #     plt.savefig(out_dir + f"/{p}_support_size_scatter.png")
+    #     plt.clf()
+
+
+
+
+
+# TODO: This could be MUCH more efficiently
 def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
 
@@ -1271,6 +1675,8 @@ def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200
     devs, min_sup, max_sup = [], [], []
     side_len = int(window_size/2)
     for i, (_, est_sup, in_tree) in enumerate(results):
+        if i % (len(results)//10) == 0:
+            print("\t", i)
         x.append(est_sup)
         window = [int(el[2]) for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
         y.append(sum(window) / len(window))
@@ -1300,15 +1706,17 @@ def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200
 cli.add_command(test_pars_weights)
 cli.add_command(trim_thresholds)
 cli.add_command(parse_clade_stats)
-cli.add_command(get_pars_score)
+cli.add_command(get_tree_stats)
 cli.add_command(clade_results)
 cli.add_command(save_supports)
 cli.add_command(larch_usher)
-cli.add_command(agg)
+cli.add_command(coverage_trial_plot)
 cli.add_command(agg_strats)
 cli.add_command(agg_pars_weights)
 cli.add_command(bin_pars_weights)
-cli.add_command(binned_clade_results)
+cli.add_command(pars_weight_clade_results)
+cli.add_command(cumm_pars_weight)
+cli.add_command(clade_results_random_scaling)
 
 if __name__ == '__main__':
     cli()
