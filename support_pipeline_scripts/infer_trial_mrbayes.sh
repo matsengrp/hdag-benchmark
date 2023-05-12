@@ -40,7 +40,7 @@ mb -i $mrbayesfile
 
 # Although the mrbayes-output.trprobs file contains the deduplicated
 # topologies, annotated with their posterior probabilities.
-tree_file=$mrbayesdir/mrbayes-output.trees
+tree_file=$mrbayesdir/mrbayes-output.t
 
 # Going back to (what should be) the data directory
 cd $datadir
