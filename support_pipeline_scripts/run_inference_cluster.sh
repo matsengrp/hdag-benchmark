@@ -7,7 +7,7 @@
 # Paramaters that determine how many trees to simulate for each clade
 num_res=10
 num_sim=10
-method="historydag"
+method=$1
 let "num_trials = $num_sim * $num_res"
 
 echo ""
