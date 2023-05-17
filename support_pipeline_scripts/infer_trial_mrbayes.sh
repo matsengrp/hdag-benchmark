@@ -34,9 +34,9 @@ seqmagick convert $ctreefasta_with_refseq $ctreenexus --alphabet dna
 mrbayesfile=$mrbayesdir/run.mb
 mrbayesoutput=$mrbayesdir/mrbayes-output
 # Produce .mb file describing the mrbayes run (including input and output files)
-python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput > $mrbayesfile
-
-mb -i $mrbayesfile
+# NOTE: Uncomment to re-run MB
+# python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput > $mrbayesfile
+# mb -i $mrbayesfile
 
 # Although the mrbayes-output.trprobs file contains the deduplicated
 # topologies, annotated with their posterior probabilities.
@@ -52,4 +52,3 @@ python $currdir/support_pipeline_scripts/cli.py save_supports -m "mrbayes" -t $c
 echo ""
 echo ""
 
-# python support_pipeline_scripts/cli.py save_supports -m "beast" -t "/home/whowards/hdag-benchmark/data/A.2.2/1/simulation/collapsed_simulated_tree.nwk" -i "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/beast-output.trees" -o "/home/whowards/hdag-benchmark/data/A.2.2/1/results/beast/results_temp.pkl"

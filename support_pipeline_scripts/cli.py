@@ -531,10 +531,13 @@ def make_stats_list(node2support, node_set):
     stats_list.sort(key=lambda el: el[1])
     return stats_list
 
-def mrbayes_output(node_set, tree_file):
+# TODO: Determine burnin and sample_freq from the input file
+def mrbayes_output(node_set, tree_file, burnin=7e7, sample_freq=2000):
     """Same as hdag output, but for MrBayes"""
     node2support = {}
     for tree_count, tree in enumerate(get_mrbayes_trees(tree_file)):
+        if tree_count * sample_freq < burnin:
+            continue
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
         node2cu = {}
         curr_internal_name = 0
@@ -1199,11 +1202,11 @@ def agg_strats(input, out_dir, clade_name, method, window_proportion=0.20):
         plt.savefig(out_dir + f"/parsiomny_distribution_for_{strat}.png")
 
 
-@click.command("cumm_pars_weight")
+@click.command("cumul_pars_weight")
 @click.option('--input', '-i', help="path to input MADAG")
 @click.option('--out_dir', '-o', help="directory path to output plot to")
 @click.option('--parsimony_weight', '-p', default=0.01, help="the coefficient to multiple parsiomny by in the negative exponential")
-def cumm_pars_weight(input, out_dir, parsimony_weight):
+def cumul_pars_weight(input, out_dir, parsimony_weight):
     """
     Plots the cummulative distribution of tree probability as a function of parsiomny score
     for various parsimony weightings.
@@ -1267,12 +1270,12 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
     results = res_no_leaves
 
 
-    if method == "beast":
-        window_size = 100
+    if method != "historydag":
+        window_size = 20
     else:
         window_size = int(len(results) * window_proportion)
 
-    out_path = out_dir + f"/adj_support_quartiles_w={window_size}.png"
+    out_path = out_dir + f"/support_quartiles_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
     # print("est\ttrue\tQ1\tQ3")
@@ -1311,10 +1314,21 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
 def clade_results(clade_dir, out_path, num_sim, method, window_proportion, results_name):
     """Given the clade directory, performs coverage analysis across all simulations"""
 
-    results_full = get_results_full(clade_dir, num_sim, method, results_name)
+    # TODO: Comment this out once these have finished
+    # skip_list = [30, 34, 36, 41, 43, 49, 56, 57, 67, 71, 75, 77, 82, 87, 96, 99, 11, 14, 17, 23, 27, 65, 16, 19]
+    skip_list = []
+    # num_sim = 40
+
+    results_full = get_results_full(clade_dir, num_sim, method, results_name, skip_list)
     window_size = int(len(results_full) * window_proportion)
 
     print(f"\tgenerating window plot at {out_path}...")
+    if method == "mrbayes":
+        window_size = 100
+    else:
+        window_size = int(len(results_full) * window_proportion)
+
+
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
 
     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
@@ -1408,7 +1422,7 @@ def clade_results_random_scaling(clade_dir, out_path, num_sim, method, window_pr
     f.clf()
 
 
-def get_results_full(clade_dir, num_sim, method, results_name):
+def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[]):
     """
     Helper method for `clade_results` that aggregates all the results.pkl files for each trial
     into a single sorted list.
@@ -1419,6 +1433,10 @@ def get_results_full(clade_dir, num_sim, method, results_name):
         # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
         #   their supports and whether they're in the true tree or not
         result_path = clade_dir + f"/{trial}/results/{method}/{results_name}"
+
+        # Skip any trials you don't want (e.g., inference on them hasn't finished for this run)
+        if trial in skip_list:
+            continue
         
         try:
             with open(result_path, "rb") as f:
@@ -1469,7 +1487,7 @@ def get_results_full(clade_dir, num_sim, method, results_name):
 
         
         # NOTE: Uncomment if you want clade size info about each tree
-        # print(f"{clade_name}/{trial} {toi_node_count} non-leaf nodes with {num_leaves} leaves")
+        print(f"{trial}:\t{toi_node_count} non-leaf nodes with {num_leaves} leaves")
     
     print(f"\tsorting {len(results_full)} results...")
     random.shuffle(results_full)
@@ -1715,7 +1733,7 @@ cli.add_command(agg_strats)
 cli.add_command(agg_pars_weights)
 cli.add_command(bin_pars_weights)
 cli.add_command(pars_weight_clade_results)
-cli.add_command(cumm_pars_weight)
+cli.add_command(cumul_pars_weight)
 cli.add_command(clade_results_random_scaling)
 
 if __name__ == '__main__':

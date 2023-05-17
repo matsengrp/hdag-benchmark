@@ -32,8 +32,8 @@ for clade in $(cat clades.txt); do
         outdir=$cladedir/$trial/figures/$method
         mkdir -p $outdir
 
-        # results=$cladedir/$trial/results/$method/adjusted_support_results.pkl
-        # python support_pipeline_scripts/cli.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
+        results=$cladedir/$trial/results/$method/results.pkl
+        python support_pipeline_scripts/cli.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
         
         # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
         # python support_pipeline_scripts/cli.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
@@ -44,14 +44,14 @@ for clade in $(cat clades.txt); do
 
     done
 
-    outdir=$cladedir/figures/$method
-    mkdir -p $outdir
-    python support_pipeline_scripts/cli.py clade_results \
-    -n $num_trials \
-    -c $cladedir \
-    -m $method \
-    -r results.pkl \
-    -o $outdir/CA_support.png
+    # outdir=$cladedir/figures/$method
+    # mkdir -p $outdir
+    # python support_pipeline_scripts/cli.py clade_results \
+    # -n $num_trials \
+    # -c $cladedir \
+    # -m $method \
+    # -r results.pkl \
+    # -o $outdir/CA_support.png
 
     # NOTE: This code generates estimated supports for adjustment
     # python support_pipeline_scripts/cli.py clade_results \
