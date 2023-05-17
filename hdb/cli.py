@@ -218,6 +218,27 @@ def load_fasta(fastapath):
                 fasta_records[-1][-1] += line.strip()
     return dict(fasta_records)
 
+@cli.command()
+@click.option("-c", "--clade-path", help="Path to clade directory.")
+@click.option("-n", "--num-trials", default=25, help="Number of trials to return.")
+def find_diversity(clade_path, num_trials):
+    trial_list = []
+    for trial in range(1, 101):
+        log_path = clade_path + f"/{trial}/results/historydag/opt_info/optimization_log_complete/logfile.csv"
+        try:
+            with open(log_path, "r") as f:
+                num_trees = f.readlines()[-1].split("\t")[-3]
+                trial_list.append((trial, num_trees))
+        except:
+            print(f"\tSkipping {log_path}")
+            continue
+    
+    trial_list.sort(key=lambda el: el[1])
+    trial_list = trial_list[-num_trials:]
+    with open("pars_div_trials.txt", "w") as f:
+        for trial, _ in trial_list:
+            f.write(f"{trial}\n")
+            
 
 if __name__ == "__main__":
     cli()  # pylint: disable=no-value-for-parameter

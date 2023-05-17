@@ -7,8 +7,12 @@
 # Paramaters that determine how many trees to simulate for each clade
 num_res=10
 num_sim=10
-method=$1
 let "num_trials = $num_sim * $num_res"
+
+num_cores=4
+trial_file="pars_div_trials"
+method=$1
+
 
 echo ""
 echo "=> Starting inference..."
@@ -31,7 +35,7 @@ for clade in $(cat ../clades.txt); do
     echo $clade
     cladedir=$datadir/$clade
 
-    for trial in $(seq $num_trials); do
+    for trial in $(cat ../$trial_file.txt); do
         logfile=$clade/$trial/results/inference.log
         echo $logfile $method
 
