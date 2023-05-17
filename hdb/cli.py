@@ -228,16 +228,17 @@ def find_diversity(clade_path, num_trials):
         try:
             with open(log_path, "r") as f:
                 num_trees = f.readlines()[-1].split("\t")[-3]
-                trial_list.append((trial, num_trees))
+                trial_list.append((trial, int(num_trees)))
         except:
             print(f"\tSkipping {log_path}")
             continue
     
-    trial_list.sort(key=lambda el: el[1])
-    trial_list = trial_list[-num_trials:]
+    trial_list.sort(key=lambda el: el[1], reverse=True)
+    trial_list = trial_list[:num_trials]
     with open("pars_div_trials.txt", "w") as f:
-        for trial, _ in trial_list:
+        for trial, num_trees in trial_list:
             f.write(f"{trial}\n")
+            print(trial, "\t", num_trees)
             
 
 if __name__ == "__main__":
