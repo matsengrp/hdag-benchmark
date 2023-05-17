@@ -1683,6 +1683,61 @@ def pars_weight_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
 
 
 
+def sliding_window_plot_new(results, std_dev=False, sup_range=False, window_size=200):
+    """Given list of results tuples returns xy coords of sliding window plot."""
+
+    results.sort(key= lambda result: result[1])
+
+    x, y = [], []
+    devs, min_sup, max_sup = [], [], []
+    side_len = int(window_size/2)
+    true_vals = Counter(res[2] for res in results[0 : min(len(results), side_len)])
+    sum_estimates = sum(res[1] for res in results[0: min(len(results), side_len)])
+    first_idx = 0
+    first_full_window_end_idx = min(len(results), window_size - 1)
+
+    for central_idx in range(len(results)):
+        proposed_first_idx = central_idx - side_len
+        proposed_last_idx = central_idx + side_len
+
+        # Adjust the window appropriately
+        if proposed_first_idx > first_idx:
+            assert proposed_first_idx - first_idx == 1
+            sum_estimates -= results[first_idx][1]
+            true_vals.subtract([results[first_idx][2]])
+            first_idx = proposed_first_idx
+        if proposed_last_idx < len(results):
+            sum_estimates += results[proposed_last_idx][1]
+            true_vals.update([results[proposed_last_idx][2]])
+        last_idx = min(proposed_last_idx, len(results))
+
+        this_window_size = sum(true_vals.values())
+        x.append(results[central_idx][1])
+        # #This would do averages instead of medians, but it doesn't seem to
+        # #work correctly..
+        # x.append(sum_estimates / this_window_size)
+        y.append(true_vals[1] / this_window_size)
+        # Standard deviations are over the window of in_true_tree variable (ie 1 or 0)
+        if std_dev:
+            avg = y[-1]
+            sq_diff = [el_count * (el - avg)**2 for el, el_count in true_vals.values()]
+            devs.append((sum(sq_diff) / this_window_size))
+
+        # Quartiles are between estimated support values
+        elif sup_range:
+            # First and fourth quartiles
+            min_sup.append(results[first_idx + int(this_window_size/4)])
+            max_sup.append(support_window[last_idx - int(this_window_size/4)])
+
+    if std_dev:
+        pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
+        neg_devs = [y_val - dev for y_val, dev in zip(y, devs)]
+        return x, y, pos_devs, neg_devs
+    elif sup_range:
+        return x, y, min_sup, max_sup
+    else:
+        return x, y
+
 # TODO: This could be MUCH more efficiently
 def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
