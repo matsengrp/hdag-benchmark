@@ -41,7 +41,7 @@ for clade in $(cat ../clades.txt); do
 
         mkdir -p $clade/$trial/results
         
-        sbatch -c 1 -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
+        sbatch -c $num_cores -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
         $currdir/support_pipeline_scripts/infer_trial_$method.sh $currdir $clade $trial
 
     done
