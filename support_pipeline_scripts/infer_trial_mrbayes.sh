@@ -11,6 +11,7 @@ ml MrBayes/3.2.7a-foss-2021b
 currdir=$1
 clade=$2
 trial=$3
+echo $trial
 
 echo $currdir
 datadir=$currdir/data
@@ -29,13 +30,25 @@ ctreefasta=${ctree}.fasta
 ctreefasta_with_refseq=$simdir/ctree_with_refseq.fasta
 ctreenexus=$mrbayesdir/ctree_with_refseq.nex
 
+echo converting fasta to nexus
 # Convert fasta to nexus file for mrbayes
 seqmagick convert $ctreefasta_with_refseq $ctreenexus --alphabet dna
 mrbayesfile=$mrbayesdir/run.mb
 mrbayesoutput=$mrbayesdir/mrbayes-output
-# Produce .mb file describing the mrbayes run (including input and output files)
-python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput > $mrbayesfile
 
+echo getting true tree
+# get the resolved true tree newick with branch lengths:
+resolvedtruetree=$mrbayesdir/resolved_true_tree.nwk
+python $currdir/hdb/cli.py resolve-multifurcations -i $ctree -o $resolvedtruetree
+
+scaledresolvedtree=$mrbayesdir/scaled_resolved_tree.nwk
+python $currdir/support_pipeline_scripts/cli.py scale_branch_lengths -i $resolvedtruetree -s 0.0000345 > $scaledresolvedtree
+
+echo building mrbayes file
+# Produce .mb file describing the mrbayes run (including input and output files)
+python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput "$(cat $scaledresolvedtree)" > $mrbayesfile
+
+echo running mrbayes...
 mb -i $mrbayesfile
 
 # Although the mrbayes-output.trprobs file contains the deduplicated

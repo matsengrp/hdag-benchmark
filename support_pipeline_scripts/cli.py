@@ -1356,6 +1356,53 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
     # plt.savefig(out_path)
     # plt.clf()
 
+def load_map_file(filepath):
+    mapping = {}
+    with open(filepath, 'r') as fh:
+        for line in fh:
+            key, val = line.strip().split()
+            mapping[key] = val
+    return mapping
+
+def write_map_file(mapping, filepath):
+    with open(filepath, 'w') as fh:
+        for key, val in mapping:
+            print(f"{key} {val}", file=fh)
+
+def write_fasta(fasta, filepath):
+    with open(filepath, 'w') as fh:
+        for key, val in fasta:
+            print(">" + key, file=fh)
+            print(val, file=fh)
+
+@click.command("integer_label_fasta")
+@click.option('--input_tree', '-t', help='path to input newick')
+@click.option('--input_map_file', '-i', default=None, help='scale factor for branch lengths')
+@click.option('--output_map_file', '-m', default=None, help='scale factor for branch lengths')
+def scale_branch_lengths(input_fasta, input_map_file, output_map_file, output_fasta):
+    fasta = hdag.parsimony.load_fasta(fasta_path)
+    if input_map_file is not None:
+        mapping = load_map_file(input_map_file)
+    else:
+        mapping = {idx + 1: key for idx, key in enumerate(fasta.keys())}
+        write_map_file(mapping, output_map_file)
+
+    rev_mapping = {val: key for key, val in mapping.items()}
+    new_fasta = {rev_mapping[seqname]: seq for seqname, seq in fasta.items()}
+    write_fasta(new_fasta, output_fasta)
+
+
+@click.command("scale_branch_lengths")
+@click.option('--input_tree', '-i', help='path to input newick')
+@click.option('--scale_factor', '-s', default=1.0, help='scale factor for branch lengths')
+def scale_branch_lengths(input_tree, scale_factor):
+    with open(input_tree, 'r') as fh:
+        tree = ete.Tree(fh.read(), format=3)
+    for node in tree.traverse():
+        node.dist = node.dist * scale_factor
+    print(tree.write(format=5))
+
+
 @click.command("clade_results_random_scaling")
 @click.option('--clade_dir', '-c', help='path to clade directory.')
 @click.option('--out_path', '-o', help='output path to store figures/tables in.')
@@ -1667,58 +1714,61 @@ def pars_weight_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
 
 def sliding_window_plot_new(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
+    side_len = window_size // 2
+    window_size = side_len * 2 + 1
+    if len(results) < window_size:
+        raise ValueError("too few clades to compute sliding window plot")
 
     results.sort(key= lambda result: result[1])
 
     x, y = [], []
     devs, min_sup, max_sup = [], [], []
-    side_len = int(window_size/2)
-    true_vals = Counter(res[2] for res in results[0 : min(len(results), side_len)])
-    sum_estimates = sum(res[1] for res in results[0: min(len(results), side_len)])
+    true_vals = Counter(res[2] for res in results[0 : window_size])
+    sum_estimates = sum(res[1] for res in results[0: window_size])
+    center_idx = side_len
+    # These are the indices of the first and last records in the window
+    # (so the window is results[first_idx:last_idx + 1])
     first_idx = 0
-    first_full_window_end_idx = min(len(results), window_size - 1)
+    last_idx = window_size - 1
 
-    for central_idx in range(len(results)):
-        proposed_first_idx = central_idx - side_len
-        proposed_last_idx = central_idx + side_len
+    def log_stats(true_vals, sum_estimates, center_idx, first_idx, last_idx):
+        x.append(results[center_idx][1])
+        y.append(true_vals[1] / window_size)
+        assert last_idx - first_idx == window_size, f"{last_idx - first_idx} != {window_size + 1} (expected)"
+        assert isclose(y[-1], sum(it[2] for it in results[first_idx: last_idx + 1]))
 
-        # Adjust the window appropriately
-        if proposed_first_idx > first_idx:
-            assert proposed_first_idx - first_idx == 1
-            sum_estimates -= results[first_idx][1]
-            true_vals.subtract([results[first_idx][2]])
-            first_idx = proposed_first_idx
-        if proposed_last_idx < len(results):
-            sum_estimates += results[proposed_last_idx][1]
-            true_vals.update([results[proposed_last_idx][2]])
-        last_idx = min(proposed_last_idx, len(results))
 
-        this_window_size = sum(true_vals.values())
-        x.append(results[central_idx][1])
-        # #This would do averages instead of medians, but it doesn't seem to
-        # #work correctly..
-        # x.append(sum_estimates / this_window_size)
-        y.append(true_vals[1] / this_window_size)
-        # Standard deviations are over the window of in_true_tree variable (ie 1 or 0)
-        if std_dev:
-            avg = y[-1]
-            sq_diff = [el_count * (el - avg)**2 for el, el_count in true_vals.values()]
-            devs.append((sum(sq_diff) / this_window_size))
+    while last_idx < len(results):
+        log_stats(true_vals, sum_estimates, center_idx, first_idx, last_idx)
+        last_idx += 1
+        true_vals.update([results[last_idx][2]])
+        true_vals.subtract([results[first_idx[2]]])
+        sum_estimates += results[last_idx][1] - results[first_idx][1]
+        first_idx += 1
+        center_idx += 1
 
-        # Quartiles are between estimated support values
-        elif sup_range:
-            # First and fourth quartiles
-            min_sup.append(results[first_idx + int(this_window_size/4)])
-            max_sup.append(support_window[last_idx - int(this_window_size/4)])
 
-    if std_dev:
-        pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
-        neg_devs = [y_val - dev for y_val, dev in zip(y, devs)]
-        return x, y, pos_devs, neg_devs
-    elif sup_range:
-        return x, y, min_sup, max_sup
-    else:
-        return x, y
+    return x, y
+    # #### past here are old things that need to get integrated
+    #     if std_dev:
+    #         avg = y[-1]
+    #         sq_diff = [el_count * (el - avg)**2 for el, el_count in true_vals.values()]
+    #         devs.append((sum(sq_diff) / this_window_size))
+
+    #     # Quartiles are between estimated support values
+    #     elif sup_range:
+    #         # First and fourth quartiles
+    #         min_sup.append(results[first_idx + int(this_window_size/4)])
+    #         max_sup.append(support_window[last_idx - int(this_window_size/4)])
+
+    # if std_dev:
+    #     pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
+    #     neg_devs = [y_val - dev for y_val, dev in zip(y, devs)]
+    #     return x, y, pos_devs, neg_devs
+    # elif sup_range:
+    #     return x, y, min_sup, max_sup
+    # else:
+    #     return x, y
 
 # TODO: This could be MUCH more efficiently
 def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
@@ -1772,6 +1822,7 @@ cli.add_command(bin_pars_weights)
 cli.add_command(pars_weight_clade_results)
 cli.add_command(cumm_pars_weight)
 cli.add_command(clade_results_random_scaling)
+cli.add_command(scale_branch_lengths)
 
 if __name__ == '__main__':
     cli()
