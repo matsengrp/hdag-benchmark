@@ -121,7 +121,8 @@ def collapse_tree(input_newick, input_fasta, output_newick):
 @click.option("-o", "--output-path", help="Output path.")
 @click.option("-s", "--resolve-seed", default=1)
 @click.option("-b", "--branch-len-model", default="num-muts")
-def resolve_multifurcations(input_path, output_path, resolve_seed, branch_len_model):
+@click.option('--add-ancestral/--no-add-ancestral', default=False, help='add leaf below root labeled `ancestral`')
+def resolve_multifurcations(input_path, output_path, resolve_seed, branch_len_model, add_ancestral):
     """
     Given an ete tree, resolves all polytomies by creating a
     uniformly random bifurcating tree that is consistent with
@@ -129,6 +130,11 @@ def resolve_multifurcations(input_path, output_path, resolve_seed, branch_len_mo
     """
     tree = ete3.Tree(input_path, format=1)
     resolve_polytomy(tree, resolve_seed, branch_len_model)
+    if add_ancestral:
+        new_tree = ete3.Tree()
+        new_tree.add_child(name='ancestral', dist=0)
+        new_tree.add_child(child=tree, dist=0)
+        tree = new_tree
     tree.write(outfile=output_path, format=1)
 
 

@@ -39,17 +39,17 @@ mrbayesoutput=$mrbayesdir/mrbayes-output
 echo getting true tree
 # get the resolved true tree newick with branch lengths:
 resolvedtruetree=$mrbayesdir/resolved_true_tree.nwk
-python $currdir/hdb/cli.py resolve-multifurcations -i $ctree -o $resolvedtruetree
+python $currdir/hdb/cli.py resolve-multifurcations -i $ctree -o $resolvedtruetree --add-ancestral
 
 scaledresolvedtree=$mrbayesdir/scaled_resolved_tree.nwk
 python $currdir/support_pipeline_scripts/cli.py scale_branch_lengths -i $resolvedtruetree -s 0.0000345 > $scaledresolvedtree
 
 echo building mrbayes file
 # Produce .mb file describing the mrbayes run (including input and output files)
-# # NOTE: Uncomment to re-run MB
-# python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput "$(cat $scaledresolvedtree)" > $mrbayesfile
+# NOTE: Uncomment to re-run MB
+python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput "$(cat $scaledresolvedtree)" > $mrbayesfile
 
-# mb -i $mrbayesfile
+mb -i $mrbayesfile
 
 # Although the mrbayes-output.trprobs file contains the deduplicated
 # topologies, annotated with their posterior probabilities.
