@@ -14,7 +14,7 @@ import subprocess
 
 # from newick_parser.tree_transformer import iter_nexus_trees
 from historydag import parsimony_utils
-from math import exp
+from math import exp, isclose
 import math
 import time
 from collections import Counter
@@ -1752,25 +1752,30 @@ def sliding_window_plot_new(results, std_dev=False, sup_range=False, window_size
     def log_stats(true_vals, sum_estimates, center_idx, first_idx, last_idx):
         x.append(results[center_idx][1])
         y.append(true_vals[1] / window_size)
-        assert last_idx - first_idx == window_size, f"{last_idx - first_idx} != {window_size + 1} (expected)"
-        assert isclose(y[-1], sum(it[2] for it in results[first_idx: last_idx + 1]))
+
+        observed_window = [it[2] for it in results[first_idx: last_idx + 1]]
+        estimates_window = [it[1] for it in results[first_idx: last_idx + 1]]
+        assert last_idx - first_idx == window_size - 1, f"{last_idx - first_idx} != {window_size - 1} (expected)"
+        assert isclose(y[-1], sum(observed_window) / window_size)
 
 
-    while last_idx < len(results):
+    while last_idx < len(results) - 1:
         log_stats(true_vals, sum_estimates, center_idx, first_idx, last_idx)
         last_idx += 1
         true_vals.update([results[last_idx][2]])
-        true_vals.subtract([results[first_idx[2]]])
+        true_vals.subtract([results[first_idx][2]])
         sum_estimates += results[last_idx][1] - results[first_idx][1]
         first_idx += 1
         center_idx += 1
+    log_stats(true_vals, sum_estimates, center_idx, first_idx, last_idx)
 
 
     return x, y
     # #### past here are old things that need to get integrated
     #     if std_dev:
     #         avg = y[-1]
-    #         sq_diff = [el_count * (el - avg)**2 for el, el_count in true_vals.values()]
+    #         sq_diff = [el_count * (el - avg)**2 for el, el_count in
+    #         true_vals.items()]
     #         devs.append((sum(sq_diff) / this_window_size))
 
     #     # Quartiles are between estimated support values
