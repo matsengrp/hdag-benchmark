@@ -96,7 +96,7 @@ def sliding_window_plot_new(results, std_dev=False, sup_range=False, window_size
         return x, y
 
     
-def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[]):
+def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[], remove_zero_sup_nodes=True):
     """
     Helper method for `clade_results` that aggregates all the results.pkl files for each trial
     into a single sorted list.
@@ -140,22 +140,12 @@ def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[]):
 
     results_full = []
     for trial, results in result_dict.items():
-        toi_node_count = 0
-        num_leaves = 0
         for result in results:
             node = result[0]
             if len(node) > 1:       # Removing leaves
+                if remove_zero_sup_nodes and result[1] == 0:
+                    continue
                 results_full.append((result[0], result[1], result[2]))
-                if result[2]:
-                    toi_node_count += 1
-            else:
-                # Checking that all leaves are in true tree
-                assert result[2]
-                num_leaves += 1
-
-        
-        # NOTE: Uncomment if you want clade size info about each tree
-        print(f"{trial}:\t{toi_node_count} non-leaf nodes with {num_leaves} leaves")
     
     print(f"\tsorting {len(results_full)} results...")
     random.shuffle(results_full)
@@ -171,7 +161,6 @@ def bin_hist_plot(results, bin_size=0.05):
     
     ind_max = 0
     for bin in range(0, 100, int(bin_size * 100)): # NOTE: this is in percent
-        est_min = bin / 100
         est_max = bin / 100 + bin_size
 
         ind_min = ind_max   # Use previous maximum index
@@ -180,11 +169,7 @@ def bin_hist_plot(results, bin_size=0.05):
                 break
         ind_max = ind_min + i
         if i == 0:
-            # There are no elements in this bin
-            # print(f"\t -- Skipping bin [{est_min}, {est_max}]")
             continue
-
-        # print(f"\t bin [{est_min}, {est_max}]")
 
         in_tree_window = [int(el[2]) for el in results[ind_min:ind_max]]
         avg = sum(in_tree_window) / len(in_tree_window)
@@ -199,5 +184,4 @@ def bin_hist_plot(results, bin_size=0.05):
     pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
     neg_devs = [y_val - dev for y_val, dev in zip(y, devs)]
 
-    # print(f"\tx: {x}\ty: {y}")
     return x, y, pos_devs, neg_devs

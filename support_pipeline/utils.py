@@ -43,30 +43,32 @@ def get_true_nodes(tree_path):
 
     return set([v for k, v in etenode2cu.items()])
 
-
+# TODO: This could probably go back in the inference pipeline
 def make_results_list(node2support, node_set, seq2taxId=None, log_prob=True):
     """Given a dictionary of node supports, and set of true nodes, returns a results list
     of triples, ordered by estimated support. `seq2taxId` and `log_prob` only need to be set
     if we are making a results list from the historydag inference"""
 
+    print("DAG supports:", len(node2support))
+
     if seq2taxId is not None:
-        node2support = {}
+        support = {}
         for node in node2support:
             if len(node) <= 1:  # UA node and leaves
                 continue
             # Convert cg label to taxon id so that its compatible with true node ids
             id_node = frozenset([seq2taxId[label.compact_genome.to_sequence()] for label in node])
-            est_sup = (node2support[node])
+            est_sup = node2support[node]
             if log_prob:
                 est_sup = exp(est_sup)
-            node2support[id_node] = est_sup
+            support[id_node] = est_sup
+        node2support = support
 
     # Construct results dict that maps nodes (frozen sets of taxon ids) to tuples of estimated
     # support and whether that node is in the true tree or not
     node2stats = {}
 
     # Get the support for all dag nodes
-    counter = 0
     for id_node, est_sup in node2support.items():
         if len(id_node) == 0:  # UA node
             continue

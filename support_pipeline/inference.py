@@ -118,13 +118,18 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
 
     print(f"=> Parsiomny score weight: k={pars_weight}")
 
+    start = time.time()
     if isinstance(inp, str):
         dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(inp)
     else:
         dag = inp
+    print(f"=> Loading DAG took {(time.time() - start)/60} minutes")
 
+    start = time.time()
+    dag.convert_to_collapsed()
     dag.make_complete()
     dag.convert_to_collapsed()
+    print(f"=> Collapsing DAG took {(time.time() - start)/60} minutes")
 
     if isinstance(pars_weight, str):
         # This recovers uniform distribution over MP trees
@@ -302,8 +307,8 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
             "-c", f"{round(int(count)/2)}",
             "-o", f"{out_dir}/opt_dag_1.pb",
             "-l", f"{log_dir}_1",
-            "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(0),
+            "--move-coeff-nodes", str(5),
+            "--move-coeff-pscore", str(1),
             "--sample-any-tree"
             ]
     if refseqfile is not None:

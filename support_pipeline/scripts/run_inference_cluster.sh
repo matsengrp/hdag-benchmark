@@ -24,7 +24,7 @@ export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 
 currdir=$PWD
-datadir=data_test
+datadir=data
 cd $datadir
 
 for clade in $(cat ../clades.txt); do
@@ -37,6 +37,7 @@ for clade in $(cat ../clades.txt); do
 
     # Only go to trials that have high parsimony diversity...
     for trial in $(cat ../$trial_file.txt); do
+    # for trial in $(seq $num_trials); do
         logfile=$clade/$trial/results/inference.log
         echo $logfile $method
 

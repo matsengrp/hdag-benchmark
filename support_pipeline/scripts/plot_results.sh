@@ -8,8 +8,11 @@
 
 set -eu
 method=$1
-num_res=1
-num_sim=1
+trial_file="pars_div_trials"
+
+
+num_res=10
+num_sim=10
 let "num_trials = $num_sim * $num_res"
 
 echo ""
@@ -20,20 +23,21 @@ eval "$(conda shell.bash hook)"
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
-
+t=$(cat $trial_file.txt)
 for clade in $(cat clades.txt); do
     # if value of $var starts with #, ignore it
     [[ $clade =~ ^#.* ]] && continue
 
-    cladedir=data_test/$clade
+    cladedir=data/$clade
 
-    for trial in $(seq $num_trials); do
+    for trial in $t; do
+    # for trial in $(seq $num_trials); do
         echo "$clade: $trial"
         outdir=$cladedir/$trial/figures/$method
         mkdir -p $outdir
 
-        results=$cladedir/$trial/results/$method/results.pkl
-        python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
+        # results=$cladedir/$trial/results/$method/results.pkl
+        # python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
         
         # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
         # python support_pipeline/plotting.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
@@ -46,12 +50,19 @@ for clade in $(cat clades.txt); do
 
     outdir=$cladedir/figures/$method
     mkdir -p $outdir
+
+    # Convert space seperated list of trials to comma separated
+    echo $t | tr " " "," > script_temp.txt
+    t_comma=$(cat script_temp.txt)
+    rm script_temp.txt
+
     python support_pipeline/plotting.py clade_results \
     -n $num_trials \
     -c $cladedir \
     -m $method \
     -r results.pkl \
-    -o $outdir/CA_support.png
+    -o $outdir/CA_support.png \
+    -t $t_comma
 
     # NOTE: This code generates estimated supports for adjustment
     # python support_pipeline_scripts/cli.py clade_results \

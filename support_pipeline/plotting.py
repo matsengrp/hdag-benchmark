@@ -14,7 +14,7 @@ from collections import Counter
 
 from historydag import parsimony_utils
 import historydag as hdag
-from plot_utils import sliding_window_plot, get_results_full
+from plot_utils import sliding_window_plot, get_results_full, bin_hist_plot
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
@@ -89,19 +89,23 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
 @click.option('--out_path', '-o', help='output path to store figures/tables in.')
 @click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
 @click.option('--num_sim', '-n', default=1, help='number of simulations to average.')
+@click.option('--trial_nums', '-t', help='the simulations to average over.')
 @click.option('--method', '-m', default='historydag')
 @click.option('--window_proportion', '-w', default=0.20, help='the proportion of the data to use as window size')
-def clade_results(clade_dir, out_path, num_sim, method, window_proportion, results_name):
+def clade_results(clade_dir, out_path, num_sim, method, window_proportion, results_name, trial_nums=None):
     """
     Generates CA plot by combining inferences across all trials for a given clade.
 
     Given the clade directory, performs coverage analysis across all simulations.
     """
 
-    # TODO: Comment this out once these have finished
-    # skip_list = [30, 34, 36, 41, 43, 49, 56, 57, 67, 71, 75, 77, 82, 87, 96, 99, 11, 14, 17, 23, 27, 65, 16, 19]
     skip_list = []
-    # num_sim = 40
+    # print("Raw trial nums:", trial_nums)
+    if trial_nums is not None:
+        trial_num_ints = [int(n) for n in trial_nums.split(",")]
+        # print("Trial nums:", trial_num_ints)
+        skip_list = [i for i in range(1, num_sim+1) if i not in trial_num_ints]
+        # print("Skipping:", skip_list)
 
     results_full = get_results_full(clade_dir, num_sim, method, results_name, skip_list)
     window_size = int(len(results_full) * window_proportion)
@@ -110,9 +114,10 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
     if method == "mrbayes":
         window_size = 100
     else:
-        window_size = int(len(results_full) * window_proportion)
+        # window_size = int(len(results_full) * window_proportion)
+        window_size=100
 
-
+    # Sliding window plot
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
 
     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
@@ -130,6 +135,21 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
     ax2.set_yscale("log")
     ax2.set_xlabel("Estimated Support")
     f.savefig(out_path)
+    f.clf()
+
+    # Binned histogram plot
+    x, y, pos_devs, neg_devs = bin_hist_plot(results_full, bin_size=0.1)
+
+    f, ax1 = plt.subplots(1, 1)
+    f.set_size_inches(6.4, 4.8)
+    ax1.set_title(f"Clade {clade_name} Binned Support")
+
+    ax1.set_ylabel(f"Empirical Probability")
+    ax1.plot(x, y, color="orange", label="Support Regressor")
+    ax1.fill_between(x, pos_devs, neg_devs, alpha=0.2, color="orange")
+    ax1.plot([0, 1], [0, 1], color="blue", label="Perfect Regressor", linestyle="dashed")
+    ax1.legend()
+    f.savefig(out_path[:-4]+"_histogram.png")
     f.clf()
 
 
