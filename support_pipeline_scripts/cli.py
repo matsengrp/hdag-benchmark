@@ -230,10 +230,10 @@ def save_supports(method, tree_path, input_path, output_path):
 
     E.g.
     python support_pipeline_scripts/cli.py save_supports \
-    -m hdag-inf \
-    -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/simulation/collapsed_simulated_tree.nwk \
-    -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/final_opt_dag.pb \
-    -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/results_adj.pkl
+    -m mrbayes \
+    -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/39/simulation/collapsed_simulated_tree.nwk \
+    -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/39/results/mrbayes/mrbayes-output.t \
+    -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/39/results/mrbayes/results.pkl
         """
 
     # Map of taxon id (e.g., s1, s4, etc) to full sequence
@@ -280,6 +280,9 @@ def get_true_nodes(tree_path):
     """
     curr_internal_name = 0
     tree = ete.Tree(tree_path)
+
+    # TODO: Should we be using a resolved tree???
+    # resolve_polytomy(tree, 123)
     etenode2cu = {}
     for node in tree.traverse("postorder"):
         if node.is_leaf():
@@ -295,6 +298,54 @@ def get_true_nodes(tree_path):
         etenode2cu[node.name] = frozenset(cu)
 
     return set([v for k, v in etenode2cu.items()])
+
+# TODO: This should go in a utils file
+def resolve_polytomy(tree, seed):
+    """
+    Given an ete tree, resolves all polytomies by creating a
+    uniformly random bifurcating tree that is consistent with
+    the multifurcating one.
+    """
+    resolved_multifurc_len = 0.001
+    with open("refseq.fasta", "r") as f:
+        f.readline()
+        genome = f.readline()
+        genome_len = len(genome)
+        print("Genome has length", genome_len)
+    random.seed(seed)
+    new_node_name = 1
+
+    def _resolve(node, new_node_name):
+        if len(node.children) > 2:
+            node_list = list(node.children)
+            avg_mut = sum([n.dist for n in node_list]) / len(node_list) # Average number of mutations from parent
+            node.children = []
+            while len(node_list) > 2:
+                # Randomly sample a pair of nodes
+                pair = random.sample(range(0, len(node_list)-1), 2)
+                pair.sort() # TODO: Why are we doing this?
+                # Create new node and make branch length
+                par = ete.Tree()
+                adj_dist = resolved_multifurc_len
+                par.dist = adj_dist
+                # merge under a parent node
+                par.name = f"r{new_node_name}"
+                new_node_name += 1
+                par.add_child(node_list.pop(pair[1]))
+                par.add_child(node_list.pop(pair[0]))
+                # insert into list for this node to be further merged
+                node_list.append(par)
+            node.add_child(node_list[0])
+            node.add_child(node_list[1])
+
+    target = [tree]
+    target.extend([n for n in tree.get_descendants()])
+    for n in target:
+        # Compute branch lengths for edge above node if not a parent node
+        if not n.is_root():
+            branch_len = n.dist
+            n.dist = branch_len
+        _resolve(n, new_node_name) # Resolve the edges under given node
 
 
 def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=False, adjust=False):
@@ -450,34 +501,34 @@ def get_mrbayes_trees(trees_file):
                 for node in tree.iter_leaves():
                     node.name = translate_dict[node.name]
                 # put original ambiguous sequences back on leaves
-                yield tree
+                yield tree, nwk
 
-def get_trprobs_trees(trprobs_file):
-    with open(trprobs_file, 'r') as fh:
-        for line in fh:
-            if 'translate' in line:
-                break
-        translate_dict = {}
-        for line in fh:
-            idx, idx_name = line.strip().split(' ')
-            translate_dict[idx] = idx_name[:-1]
-            if idx_name[-1] == ';':
-                break
+# def get_trprobs_trees(trprobs_file):
+#     with open(trprobs_file, 'r') as fh:
+#         for line in fh:
+#             if 'translate' in line:
+#                 break
+#         translate_dict = {}
+#         for line in fh:
+#             idx, idx_name = line.strip().split(' ')
+#             translate_dict[idx] = idx_name[:-1]
+#             if idx_name[-1] == ';':
+#                 break
 
-    with open(trprobs_file, 'r') as fh:
-        for line in fh:
-            if 'tree' in line.strip()[0:5]:
-                treeprob = float(re.search(r"(p = )([\d\.]+)", line).groups()[-1])
-                cumulprob = float(re.search(r"(P = )([\d\.]+)", line).groups()[-1])
-                nwk = line.strip().split(' ')[-1]
-                tree = build_tree(nwk, translate_dict)
-                for node in tree.iter_leaves():
-                    node.name = translate_dict[node.name]
-                # put original ambiguous sequences back on leaves
-                print('.')
-                tree.prob = treeprob
-                tree.cumulprob = cumulprob
-                yield tree
+#     with open(trprobs_file, 'r') as fh:
+#         for line in fh:
+#             if 'tree' in line.strip()[0:5]:
+#                 treeprob = float(re.search(r"(p = )([\d\.]+)", line).groups()[-1])
+#                 cumulprob = float(re.search(r"(P = )([\d\.]+)", line).groups()[-1])
+#                 nwk = line.strip().split(' ')[-1]
+#                 tree = build_tree(nwk, translate_dict)
+#                 for node in tree.iter_leaves():
+#                     node.name = translate_dict[node.name]
+#                 # put original ambiguous sequences back on leaves
+#                 print('.')
+#                 tree.prob = treeprob
+#                 tree.cumulprob = cumulprob
+#                 yield tree
 
 def reroot(new_root):
     """
@@ -513,11 +564,9 @@ def make_stats_list(node2support, node_set):
     node2stats = {}
 
     # Get the support for all dag nodes
-    counter = 0
     for id_node, est_sup in node2support.items():
         if len(id_node) == 0:  # UA node
             continue
-
         node2stats[id_node] = (est_sup, id_node in node_set)
     
     # Get the support for all nodes in true tree
@@ -532,12 +581,18 @@ def make_stats_list(node2support, node_set):
     return stats_list
 
 # TODO: Determine burnin and sample_freq from the input file
-def mrbayes_output(node_set, tree_file, burnin=7e7, sample_freq=2000):
+def mrbayes_output(node_set, tree_file, burnin=2.5e7, sample_freq=1000):
     """Same as hdag output, but for MrBayes"""
+    print("Burnin:", burnin)
     node2support = {}
-    for tree_count, tree in enumerate(get_mrbayes_trees(tree_file)):
-        if tree_count * sample_freq < burnin:
+    tree_count = 0
+    tree_prev = None
+    nwk_prev = None
+    for i, (tree, nwk) in enumerate(get_mrbayes_trees(tree_file)):
+        # TODO: Uncomment
+        if i * sample_freq < burnin:
             continue
+        tree_count += 1
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
         node2cu = {}
         curr_internal_name = 0
@@ -555,12 +610,21 @@ def mrbayes_output(node_set, tree_file, burnin=7e7, sample_freq=2000):
             node2cu[node.name] = cu
             if cu not in node2support:
                 node2support[cu] = 0
-            # The unrooted topologies in trprobs are unique, so we don't need
-            # to worry about uniqueness when rerooting them:
             node2support[cu] += 1
+
+        # See how different each sample is from each other
+        # if tree_prev is not None:
+        #     rf = rerooted.compare(tree_prev)['rf']
+        #     print(i * sample_freq, "\t", rf, "\t", nwk == nwk_prev)
+        # tree_prev = rerooted
+        # nwk_prev = nwk
+        
 
     for node, count in node2support.items():
         node2support[node] = count / tree_count
+
+    # print(node2support)
+    print("Number of trees used", tree_count)
 
     return make_stats_list(node2support, node_set)
 
@@ -1271,7 +1335,7 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
 
 
     if method != "historydag":
-        window_size = 20
+        window_size = 50
     else:
         window_size = int(len(results) * window_proportion)
 
@@ -1315,16 +1379,20 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
     """Given the clade directory, performs coverage analysis across all simulations"""
 
     # TODO: Comment this out once these have finished
-    # skip_list = [30, 34, 36, 41, 43, 49, 56, 57, 67, 71, 75, 77, 82, 87, 96, 99, 11, 14, 17, 23, 27, 65, 16, 19]
-    skip_list = []
-    # num_sim = 40
+    # keep_list = [52, 55, 61, 73, 81, 97]
+    # keep_list = [35, 61, 97]
+    keep_list = range(1,101)
+    skip_list = [i for i in range(1, 101) if i not in keep_list]
 
     results_full = get_results_full(clade_dir, num_sim, method, results_name, skip_list)
+    # TODO: remove a large portion of the results that have low estimated support
+    # results_full = results_full[int(len(results_full)*0.9):]
+
     window_size = int(len(results_full) * window_proportion)
 
     print(f"\tgenerating window plot at {out_path}...")
     if method == "mrbayes":
-        window_size = 100
+        window_size = 50
     else:
         window_size = int(len(results_full) * window_proportion)
 
@@ -1389,21 +1457,21 @@ def write_fasta(fasta, filepath):
             print(">" + key, file=fh)
             print(val, file=fh)
 
-@click.command("integer_label_fasta")
-@click.option('--input_tree', '-t', help='path to input newick')
-@click.option('--input_map_file', '-i', default=None, help='scale factor for branch lengths')
-@click.option('--output_map_file', '-m', default=None, help='scale factor for branch lengths')
-def scale_branch_lengths(input_fasta, input_map_file, output_map_file, output_fasta):
-    fasta = hdag.parsimony.load_fasta(fasta_path)
-    if input_map_file is not None:
-        mapping = load_map_file(input_map_file)
-    else:
-        mapping = {idx + 1: key for idx, key in enumerate(fasta.keys())}
-        write_map_file(mapping, output_map_file)
+# @click.command("integer_label_fasta")
+# @click.option('--input_tree', '-t', help='path to input newick')
+# @click.option('--input_map_file', '-i', default=None, help='scale factor for branch lengths')
+# @click.option('--output_map_file', '-m', default=None, help='scale factor for branch lengths')
+# def scale_branch_lengths(input_fasta, input_map_file, output_map_file, output_fasta):
+#     fasta = hdag.parsimony.load_fasta(fasta_path)
+#     if input_map_file is not None:
+#         mapping = load_map_file(input_map_file)
+#     else:
+#         mapping = {idx + 1: key for idx, key in enumerate(fasta.keys())}
+#         write_map_file(mapping, output_map_file)
 
-    rev_mapping = {val: key for key, val in mapping.items()}
-    new_fasta = {rev_mapping[seqname]: seq for seqname, seq in fasta.items()}
-    write_fasta(new_fasta, output_fasta)
+#     rev_mapping = {val: key for key, val in mapping.items()}
+#     new_fasta = {rev_mapping[seqname]: seq for seqname, seq in fasta.items()}
+#     write_fasta(new_fasta, output_fasta)
 
 
 @click.command("scale_branch_lengths")
@@ -1413,6 +1481,8 @@ def scale_branch_lengths(input_tree, scale_factor):
     with open(input_tree, 'r') as fh:
         tree = ete.Tree(fh.read(), format=3)
     for node in tree.traverse():
+        if node.dist== 0:
+            node.dist = 0.00001
         node.dist = node.dist * scale_factor
     print(tree.write(format=5))
 

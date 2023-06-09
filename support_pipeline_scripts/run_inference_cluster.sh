@@ -36,7 +36,7 @@ for clade in $(cat ../clades.txt); do
     cladedir=$datadir/$clade
 
     for trial in $(cat ../$trial_file.txt); do
-        logfile=$clade/$trial/results/inference.log
+        logfile=$clade/$trial/results/inference_$method.log
         echo $logfile $method
 
         mkdir -p $clade/$trial/results

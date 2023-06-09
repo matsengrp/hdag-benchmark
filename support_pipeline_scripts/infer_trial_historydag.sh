@@ -42,7 +42,7 @@ optdag_final=final_opt_dag
 
 echo "===> lusher optimizing..."
 log_prefix=$dagdir/opt_info/optimization_log
-python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 2000 -o $dagdir -l $log_prefix -f $optdag_final
+python ../support_pipeline_scripts/cli.py larch_usher -i $seedtree -r $refseqfile -c 4000 -o $dagdir -l $log_prefix -f $optdag_final
 
 # NOTE: Saves single results list for MP trimmed node support
 # python ../support_pipeline_scripts/cli.py save_supports -m "hdag-adj" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/adjusted_support_results.pkl

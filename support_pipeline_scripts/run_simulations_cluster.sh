@@ -23,6 +23,8 @@ export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 mkdir -p data
 cd data
 
+root_dir=$PWD
+
 # Get sarscov usher tree and reference sequence
 bigtree=public-2022-10-01.all.masked.pb.gz
 [ -f $bigtree ] || {
@@ -56,7 +58,7 @@ for clade in $(cat ../clades.txt); do
 
     # Randomly resolve
     for rseed in $(seq $num_res); do
-        echo "   $rseed"
+        # echo "   $rseed"
         rdir=$clade/"resolved"/$rseed
         mkdir -p $rdir
         rtree=$rdir/rtree.nwk
@@ -64,9 +66,14 @@ for clade in $(cat ../clades.txt); do
         hdb resolve-multifurcations -i $ntree -o $rtree --resolve-seed $rseed --branch-len-model num-muts
 
         for sim in $(seq $num_sim); do
-            echo "      $sim"
             let "trial = ($rseed-1) * $num_res + $sim"
             # Converts pair of rseed trial into a single 1-indexed number
+            
+            strr=$(cat ../pars_div_trials.txt)
+            nw_strr="${strr//$'\n'/ }"
+            
+            # skips simulations that aren't in pars_div_trials
+            [[ " $nw_strr " =~ " $trial " ]] && echo $trial || continue
 
             simdir=$clade/$trial/"simulation"
             mkdir -p $simdir

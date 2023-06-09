@@ -27,31 +27,31 @@ for clade in $(cat clades.txt); do
 
     cladedir=data/$clade
 
-    for trial in $(seq $num_trials); do
-        echo "$clade: $trial"
-        outdir=$cladedir/$trial/figures/$method
-        mkdir -p $outdir
+    # # for trial in $(seq $num_trials); do
+    # for trial in $(cat pars_div_trials.txt); do
+    #     echo "$clade: $trial"
+    #     outdir=$cladedir/$trial/figures/$method
+    #     mkdir -p $outdir
 
-        results=$cladedir/$trial/results/$method/results.pkl
-        python support_pipeline_scripts/cli.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
+    #     results=$cladedir/$trial/results/$method/results.pkl
+    #     python support_pipeline_scripts/cli.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
         
-        # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
-        # python support_pipeline_scripts/cli.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
-        # python support_pipeline_scripts/cli.py bin_pars_weights -i $results -o $outdir -c $clade -b 0.05 -m $method
+    #     # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
+    #     # python support_pipeline_scripts/cli.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
+    #     # python support_pipeline_scripts/cli.py bin_pars_weights -i $results -o $outdir -c $clade -b 0.05 -m $method
 
-        # dag_path=$cladedir/$trial/results/$method/final_opt_dag.pb
-        # python support_pipeline_scripts/cli.py cumm_pars_weight -i $dag_path -o $outdir -p -0.1
+    #     # dag_path=$cladedir/$trial/results/$method/final_opt_dag.pb
+    #     # python support_pipeline_scripts/cli.py cumm_pars_weight -i $dag_path -o $outdir -p -0.1
+    # done
 
-    done
-
-    # outdir=$cladedir/figures/$method
-    # mkdir -p $outdir
-    # python support_pipeline_scripts/cli.py clade_results \
-    # -n $num_trials \
-    # -c $cladedir \
-    # -m $method \
-    # -r results.pkl \
-    # -o $outdir/CA_support.png
+    outdir=$cladedir/figures/$method
+    mkdir -p $outdir
+    python support_pipeline_scripts/cli.py clade_results \
+    -n $num_trials \
+    -c $cladedir \
+    -m $method \
+    -r results.pkl \
+    -o $outdir/CA_support.png
 
     # NOTE: This code generates estimated supports for adjustment
     # python support_pipeline_scripts/cli.py clade_results \
