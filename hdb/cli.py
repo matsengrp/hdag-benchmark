@@ -121,7 +121,8 @@ def collapse_tree(input_newick, input_fasta, output_newick):
 @click.option("-o", "--output-path", help="Output path.")
 @click.option("-s", "--resolve-seed", default=1)
 @click.option("-b", "--branch-len-model", default="num-muts")
-def resolve_multifurcations(input_path, output_path, resolve_seed, branch_len_model):
+@click.option('--add-ancestral/--no-add-ancestral', default=False, help='add leaf below root labeled `ancestral`')
+def resolve_multifurcations(input_path, output_path, resolve_seed, branch_len_model, add_ancestral):
     """
     Given an ete tree, resolves all polytomies by creating a
     uniformly random bifurcating tree that is consistent with
@@ -129,6 +130,11 @@ def resolve_multifurcations(input_path, output_path, resolve_seed, branch_len_mo
     """
     tree = ete3.Tree(input_path, format=1)
     resolve_polytomy(tree, resolve_seed, branch_len_model)
+    if add_ancestral:
+        new_tree = ete3.Tree()
+        new_tree.add_child(name='ancestral', dist=0)
+        new_tree.add_child(child=tree, dist=0)
+        tree = new_tree
     tree.write(outfile=output_path, format=1)
 
 
@@ -218,6 +224,28 @@ def load_fasta(fastapath):
                 fasta_records[-1][-1] += line.strip()
     return dict(fasta_records)
 
+@cli.command()
+@click.option("-c", "--clade-path", help="Path to clade directory.")
+@click.option("-n", "--num-trials", default=25, help="Number of trials to return.")
+def find_diversity(clade_path, num_trials):
+    trial_list = []
+    for trial in range(1, 101):
+        log_path = clade_path + f"/{trial}/results/historydag/opt_info/optimization_log_complete/logfile.csv"
+        try:
+            with open(log_path, "r") as f:
+                num_trees = f.readlines()[-1].split("\t")[-3]
+                trial_list.append((trial, int(num_trees)))
+        except:
+            print(f"\tSkipping {log_path}")
+            continue
+    
+    trial_list.sort(key=lambda el: el[1], reverse=True)
+    trial_list = trial_list[:num_trials]
+    with open("pars_div_trials.txt", "w") as f:
+        for trial, num_trees in trial_list:
+            f.write(f"{trial}\n")
+            print(trial, "\t", num_trees)
+            
 
 @cli.command()
 @click.option("-c", "--clade-path", help="Path to clade directory.")

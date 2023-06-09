@@ -1,10 +1,11 @@
 execute {0[0]};
+
 begin mrbayes;
-    set autoclose=yes nowarn=yes seed=42 swapseed=1337;
+    set nowarn=yes seed=42 swapseed=1337;
     lset nst=6 rates=invgamma ngammacat=4;
-    prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:uniform(0,1);
-    mcmcp nruns=1 nchains=4 ngen=1000000000 samplefreq=2000 printfreq=100000 diagnfreq=100000 file={0[1]} append=no;
+    prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:exponential(29900);
+    mcmcp nruns=1 nchains=4 ngen=50000000 samplefreq=1000 printfreq=1000 diagnfreq=1000 file={0[1]} append=no;
     mcmc;
-    sump burnin=100000000;
-    sumt burnin=100000000;
+    sump burninfrac=0.25;
+    sumt burninfrac=0.25;
 end;
