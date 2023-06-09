@@ -429,6 +429,29 @@ def hdag_output(node_set, pb_file, taxId2seq):
 
     return stats_list
 
+
+def get_mrbayes_trees(trees_file):
+    with open(trees_file, 'r') as fh:
+        for line in fh:
+            if 'translate' in line:
+                break
+        translate_dict = {}
+        for line in fh:
+            idx, idx_name = line.strip().split(' ')
+            translate_dict[idx] = idx_name[:-1]
+            if idx_name[-1] == ';':
+                break
+
+    with open(trees_file, 'r') as fh:
+        for line in fh:
+            if 'tree' in line.strip()[0:5]:
+                nwk = line.strip().split(' ')[-1]
+                tree = build_tree(nwk, translate_dict)
+                for node in tree.iter_leaves():
+                    node.name = translate_dict[node.name]
+                # put original ambiguous sequences back on leaves
+                yield tree
+
 def get_trprobs_trees(trprobs_file):
     with open(trprobs_file, 'r') as fh:
         for line in fh:
@@ -508,10 +531,13 @@ def make_stats_list(node2support, node_set):
     stats_list.sort(key=lambda el: el[1])
     return stats_list
 
-def mrbayes_output(node_set, tree_file):
+# TODO: Determine burnin and sample_freq from the input file
+def mrbayes_output(node_set, tree_file, burnin=7e7, sample_freq=2000):
     """Same as hdag output, but for MrBayes"""
     node2support = {}
-    for tree in get_trprobs_trees(tree_file):
+    for tree_count, tree in enumerate(get_mrbayes_trees(tree_file)):
+        if tree_count * sample_freq < burnin:
+            continue
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
         node2cu = {}
         curr_internal_name = 0
@@ -531,7 +557,10 @@ def mrbayes_output(node_set, tree_file):
                 node2support[cu] = 0
             # The unrooted topologies in trprobs are unique, so we don't need
             # to worry about uniqueness when rerooting them:
-            node2support[cu] += tree.prob
+            node2support[cu] += 1
+
+    for node, count in node2support.items():
+        node2support[node] = count / tree_count
 
     return make_stats_list(node2support, node_set)
 
@@ -923,7 +952,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
             "-o", f"{out_dir}/{final_dag_name}.pb",
             "-l", f"{log_dir}_complete",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str('-03')
+            "--move-coeff-pscore", str(1)
             ]
     subprocess.run(args=args)
 
@@ -1173,11 +1202,11 @@ def agg_strats(input, out_dir, clade_name, method, window_proportion=0.20):
         plt.savefig(out_dir + f"/parsiomny_distribution_for_{strat}.png")
 
 
-@click.command("cumm_pars_weight")
+@click.command("cumul_pars_weight")
 @click.option('--input', '-i', help="path to input MADAG")
 @click.option('--out_dir', '-o', help="directory path to output plot to")
 @click.option('--parsimony_weight', '-p', default=0.01, help="the coefficient to multiple parsiomny by in the negative exponential")
-def cumm_pars_weight(input, out_dir, parsimony_weight):
+def cumul_pars_weight(input, out_dir, parsimony_weight):
     """
     Plots the cummulative distribution of tree probability as a function of parsiomny score
     for various parsimony weightings.
@@ -1241,12 +1270,12 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
     results = res_no_leaves
 
 
-    if method == "beast":
-        window_size = 100
+    if method != "historydag":
+        window_size = 20
     else:
         window_size = int(len(results) * window_proportion)
 
-    out_path = out_dir + f"/adj_support_quartiles_w={window_size}.png"
+    out_path = out_dir + f"/support_quartiles_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
     # print("est\ttrue\tQ1\tQ3")
@@ -1285,10 +1314,21 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
 def clade_results(clade_dir, out_path, num_sim, method, window_proportion, results_name):
     """Given the clade directory, performs coverage analysis across all simulations"""
 
-    results_full = get_results_full(clade_dir, num_sim, method, results_name)
+    # TODO: Comment this out once these have finished
+    # skip_list = [30, 34, 36, 41, 43, 49, 56, 57, 67, 71, 75, 77, 82, 87, 96, 99, 11, 14, 17, 23, 27, 65, 16, 19]
+    skip_list = []
+    # num_sim = 40
+
+    results_full = get_results_full(clade_dir, num_sim, method, results_name, skip_list)
     window_size = int(len(results_full) * window_proportion)
 
     print(f"\tgenerating window plot at {out_path}...")
+    if method == "mrbayes":
+        window_size = 100
+    else:
+        window_size = int(len(results_full) * window_proportion)
+
+
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
 
     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
@@ -1382,7 +1422,7 @@ def clade_results_random_scaling(clade_dir, out_path, num_sim, method, window_pr
     f.clf()
 
 
-def get_results_full(clade_dir, num_sim, method, results_name):
+def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[]):
     """
     Helper method for `clade_results` that aggregates all the results.pkl files for each trial
     into a single sorted list.
@@ -1393,6 +1433,10 @@ def get_results_full(clade_dir, num_sim, method, results_name):
         # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
         #   their supports and whether they're in the true tree or not
         result_path = clade_dir + f"/{trial}/results/{method}/{results_name}"
+
+        # Skip any trials you don't want (e.g., inference on them hasn't finished for this run)
+        if trial in skip_list:
+            continue
         
         try:
             with open(result_path, "rb") as f:
@@ -1443,7 +1487,7 @@ def get_results_full(clade_dir, num_sim, method, results_name):
 
         
         # NOTE: Uncomment if you want clade size info about each tree
-        # print(f"{clade_name}/{trial} {toi_node_count} non-leaf nodes with {num_leaves} leaves")
+        print(f"{trial}:\t{toi_node_count} non-leaf nodes with {num_leaves} leaves")
     
     print(f"\tsorting {len(results_full)} results...")
     random.shuffle(results_full)
@@ -1639,6 +1683,61 @@ def pars_weight_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
 
 
 
+def sliding_window_plot_new(results, std_dev=False, sup_range=False, window_size=200):
+    """Given list of results tuples returns xy coords of sliding window plot."""
+
+    results.sort(key= lambda result: result[1])
+
+    x, y = [], []
+    devs, min_sup, max_sup = [], [], []
+    side_len = int(window_size/2)
+    true_vals = Counter(res[2] for res in results[0 : min(len(results), side_len)])
+    sum_estimates = sum(res[1] for res in results[0: min(len(results), side_len)])
+    first_idx = 0
+    first_full_window_end_idx = min(len(results), window_size - 1)
+
+    for central_idx in range(len(results)):
+        proposed_first_idx = central_idx - side_len
+        proposed_last_idx = central_idx + side_len
+
+        # Adjust the window appropriately
+        if proposed_first_idx > first_idx:
+            assert proposed_first_idx - first_idx == 1
+            sum_estimates -= results[first_idx][1]
+            true_vals.subtract([results[first_idx][2]])
+            first_idx = proposed_first_idx
+        if proposed_last_idx < len(results):
+            sum_estimates += results[proposed_last_idx][1]
+            true_vals.update([results[proposed_last_idx][2]])
+        last_idx = min(proposed_last_idx, len(results))
+
+        this_window_size = sum(true_vals.values())
+        x.append(results[central_idx][1])
+        # #This would do averages instead of medians, but it doesn't seem to
+        # #work correctly..
+        # x.append(sum_estimates / this_window_size)
+        y.append(true_vals[1] / this_window_size)
+        # Standard deviations are over the window of in_true_tree variable (ie 1 or 0)
+        if std_dev:
+            avg = y[-1]
+            sq_diff = [el_count * (el - avg)**2 for el, el_count in true_vals.values()]
+            devs.append((sum(sq_diff) / this_window_size))
+
+        # Quartiles are between estimated support values
+        elif sup_range:
+            # First and fourth quartiles
+            min_sup.append(results[first_idx + int(this_window_size/4)])
+            max_sup.append(support_window[last_idx - int(this_window_size/4)])
+
+    if std_dev:
+        pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
+        neg_devs = [y_val - dev for y_val, dev in zip(y, devs)]
+        return x, y, pos_devs, neg_devs
+    elif sup_range:
+        return x, y, min_sup, max_sup
+    else:
+        return x, y
+
 # TODO: This could be MUCH more efficiently
 def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
@@ -1689,7 +1788,7 @@ cli.add_command(agg_strats)
 cli.add_command(agg_pars_weights)
 cli.add_command(bin_pars_weights)
 cli.add_command(pars_weight_clade_results)
-cli.add_command(cumm_pars_weight)
+cli.add_command(cumul_pars_weight)
 cli.add_command(clade_results_random_scaling)
 
 if __name__ == '__main__':

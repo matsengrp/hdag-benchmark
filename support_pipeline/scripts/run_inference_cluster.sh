@@ -5,13 +5,17 @@
 # Should output file containing node supports for every simulated dataset
 
 # Paramaters that determine how many trees to simulate for each clade
-num_res=10
-num_sim=10
+num_res=1
+num_sim=1
+
+num_cores=4
+trial_file="pars_div_trials"
 method=$1
+
 let "num_trials = $num_sim * $num_res"
 
 echo ""
-echo "=> Starting inference..."
+echo "=> Starting inference for "$method"..."
 
 set -eu
 eval "$(conda shell.bash hook)"
@@ -31,14 +35,16 @@ for clade in $(cat ../clades.txt); do
     echo $clade
     cladedir=$datadir/$clade
 
-    for trial in $(seq $num_trials); do
+    # Only go to trials that have high parsimony diversity...
+    for trial in $(cat ../$trial_file.txt); do
+    # for trial in $(seq $num_trials); do
         logfile=$clade/$trial/results/inference.log
         echo $logfile $method
 
         mkdir -p $clade/$trial/results
         
-        sbatch -c 1 -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
-        $currdir/support_pipeline_scripts/infer_trial_$method.sh $currdir $clade $trial
+        sbatch -c $num_cores -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
+        $currdir/support_pipeline/scripts/infer_trial_$method.sh $currdir $clade $trial
 
     done
 done
