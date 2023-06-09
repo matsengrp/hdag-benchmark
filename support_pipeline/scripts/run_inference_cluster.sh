@@ -5,10 +5,10 @@
 # Should output file containing node supports for every simulated dataset
 
 # Paramaters that determine how many trees to simulate for each clade
-num_res=1
-num_sim=1
+num_res=10
+num_sim=10
 
-num_cores=4
+num_cores=2
 trial_file="pars_div_trials"
 method=$1
 
@@ -38,12 +38,12 @@ for clade in $(cat ../clades.txt); do
     # Only go to trials that have high parsimony diversity...
     for trial in $(cat ../$trial_file.txt); do
     # for trial in $(seq $num_trials); do
-        logfile=$clade/$trial/results/inference.log
+        logfile=$clade/$trial/results/inference__$method.log
         echo $logfile $method
 
         mkdir -p $clade/$trial/results
         
-        sbatch -c $num_cores -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
+        sbatch -t 6-0 -c $num_cores -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
         $currdir/support_pipeline/scripts/infer_trial_$method.sh $currdir $clade $trial
 
     done

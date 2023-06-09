@@ -41,8 +41,9 @@ usher-sampled -v $ctreevcf -t $starttree -o $seedtree  --optimization_minutes=0 
 
 echo "===> lusher optimizing..."
 log_prefix=$dagdir/opt_info/optimization_log
-python ../support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 2000 -o $dagdir -l $log_prefix -f $optdag_final
+python ../support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 4000 -o $dagdir -l $log_prefix -f $optdag_final
 
+# TODO: Rename 'hdag-...' -> 'historydag-...' and change save_supports method accordingly
 # NOTE: Saves single results list for MP trimmed node support
 # python ../support_pipeline/inference.py save_supports -m "hdag-adj" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/adjusted_support_results.pkl
 # TODO: Change back to optdag_final

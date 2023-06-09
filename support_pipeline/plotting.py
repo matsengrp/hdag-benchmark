@@ -51,17 +51,12 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
 
 
     if method != "historydag":
-        window_size = 20
+        window_size = 50
     else:
         window_size = int(len(results) * window_proportion)
 
     out_path = out_dir + f"/support_quartiles_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
-
-    # print("est\ttrue\tQ1\tQ3")
-    # for num, (i, j, k, l) in enumerate(zip(x, y, min_sup, max_sup)):
-    #     print(f"{num}\t{i:3f}\t{j:3f}\t{k:3f}\t{l:3f}")
-    # print(window_size)
 
     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
     f.set_size_inches(7, 9)
@@ -151,6 +146,11 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
     ax1.legend()
     f.savefig(out_path[:-4]+"_histogram.png")
     f.clf()
+
+
+cli.add_command(coverage_trial_plot)
+cli.add_command(clade_results)
+# NOTE: Methods below here have not been thoroughly checked
 
 
 @click.command("agg_pars_weights")
@@ -624,9 +624,6 @@ def pars_weight_clade_results(clade_dir, out_dir, num_sim, method, bin_size):
     #     plt.legend()
     #     plt.savefig(out_dir + f"/{p}_support_size_scatter.png")
     #     plt.clf()
-
-cli.add_command(coverage_trial_plot)
-cli.add_command(clade_results)
 
     
 
