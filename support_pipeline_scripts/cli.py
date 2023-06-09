@@ -1016,7 +1016,7 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
             "-o", f"{out_dir}/{final_dag_name}.pb",
             "-l", f"{log_dir}_complete",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str('-03')
+            "--move-coeff-pscore", str(1)
             ]
     subprocess.run(args=args)
 
