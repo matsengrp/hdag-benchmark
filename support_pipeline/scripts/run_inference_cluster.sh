@@ -24,7 +24,7 @@ export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 
 currdir=$PWD
-datadir=data
+datadir=data_new_sim
 cd $datadir
 
 for clade in $(cat ../clades.txt); do
@@ -36,15 +36,21 @@ for clade in $(cat ../clades.txt); do
     cladedir=$datadir/$clade
 
     # Only go to trials that have high parsimony diversity...
-    for trial in $(cat ../$trial_file.txt); do
+    for trial in $(cat $clade/$trial_file.txt); do
     # for trial in $(seq $num_trials); do
         logfile=$clade/$trial/results/inference__$method.log
         echo $logfile $method
 
         mkdir -p $clade/$trial/results
         
-        sbatch -t 6-0 -c $num_cores -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
+        sbatch -t 10-0 -c $num_cores -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
         $currdir/support_pipeline/scripts/infer_trial_$method.sh $currdir $clade $trial
 
     done
 done
+
+# sbatch -c 4 -J "real inf" \
+# -o /fh/fast/matsen_e/whowards/hdag-benchmark/data_new_sim/AY.108/real/results/inference_historydag.log \
+# -e /fh/fast/matsen_e/whowards/hdag-benchmark/data_new_sim/AY.108/real/results/inference_historydag.err \
+# /fh/fast/matsen_e/whowards/hdag-benchmark/support_pipeline/scripts/sandbox/hdag_on_reconstructed_seqs.sh $PWD AY.108
+

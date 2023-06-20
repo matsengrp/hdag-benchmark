@@ -30,9 +30,11 @@ for seed in $(seq 50); do
     
     phastSim --outpath $simdir/ --seed $s --createFasta --createInfo \
             --createNewick --createPhylip --treeFile $rtree \
-            --scale 0.0000345 --invariable 0.1 --alpha 1.0 \
-            --hyperMutProbs 0.01 0.01 --hyperMutRates 20.0 200.0 \
+            --scale 0.00003344 \
+            --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 \
             --reference refseq.fasta --eteFormat 1
+            # --invariable 0.1 --alpha 1.0 \
+            # --hyperMutProbs 0.01 0.01 --hyperMutRates 20.0 200.0 \
     
     simtree=$simdir/sars-cov-2_simulation_output.tree
     simfasta=$simdir/sars-cov-2_simulation_output.fasta

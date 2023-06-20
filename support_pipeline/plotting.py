@@ -3,7 +3,7 @@ import random
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
+import pandas as pd
 import seaborn as sns
 sns.set_theme()
 
@@ -12,9 +12,10 @@ from math import exp
 import math
 from collections import Counter
 
+from scipy import stats
 from historydag import parsimony_utils
 import historydag as hdag
-from plot_utils import sliding_window_plot, get_results_full, bin_hist_plot
+from plot_utils import sliding_window_plot, get_results_full, bin_hist_plot, plot_scatter_with_line
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
@@ -49,14 +50,19 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
             res_no_leaves.append(el)
     results = res_no_leaves
 
+    max_est = max([est_sup for node, est_sup, in_tree in results])
+    print("Maximum value in results is:", max_est)
+    assert math.isclose(max_est, 1)
+
 
     if method != "historydag":
         window_size = 50
     else:
-        window_size = int(len(results) * window_proportion)
+        window_size = 30 #int(len(results) * window_proportion)
 
     out_path = out_dir + f"/support_quartiles_w={window_size}.png"
-    x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
+    x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True) # TODO: Add later?
+    # x, y = sliding_window_plot(results, window_size=window_size, sup_range=True)
 
     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
     f.set_size_inches(7, 9)
@@ -107,10 +113,10 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
 
     print(f"\tgenerating window plot at {out_path}...")
     if method == "mrbayes":
-        window_size = 100
+        window_size = 500
     else:
         # window_size = int(len(results_full) * window_proportion)
-        window_size=100
+        window_size = 150
 
     # Sliding window plot
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
@@ -133,7 +139,7 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
     f.clf()
 
     # Binned histogram plot
-    x, y, pos_devs, neg_devs = bin_hist_plot(results_full, bin_size=0.1)
+    x, y, pos_devs, neg_devs = bin_hist_plot(results_full, bin_size=0.05)
 
     f, ax1 = plt.subplots(1, 1)
     f.set_size_inches(6.4, 4.8)
@@ -148,10 +154,216 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
     f.clf()
 
 
-cli.add_command(coverage_trial_plot)
-cli.add_command(clade_results)
-# NOTE: Methods below here have not been thoroughly checked
+@click.command("compare_trial_results")
+@click.option('--clade_dir', '-c', help='path to clade directory.')
+@click.option('--out_path', '-o', help='output path to store figures/tables in.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
+@click.option('--trial_nums', '-t', help='the simulations to average over.')
+@click.option('--method1', '-m1', default='historydag')
+@click.option('--method2', '-m2', default='mrbayes')
+def compare_trial_results(clade_dir, out_path, method1, method2, results_name, trial_nums=None):
+    """
+    Given two methods and the name of their results files, plots a scatter plot of their
+    estimated supports.
+    
+    Uses only the nodes in method1 #TODO: Might wanna change this
 
+    E.g.,
+python support_pipeline/plotting.py compare_trial_results \
+-c /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108 \
+-o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/figures/clade_comparison_trials \
+-t 37,55,16,81,38,61,97,78,26,73,20,33,84,85,28,60,25,36,96,35,40,52,39,74 
+    
+    """
+    num_sim = 100
+    skip_list = []
+    # print("Raw trial nums:", trial_nums)
+    if trial_nums is not None:
+        trial_num_ints = [int(n) for n in trial_nums.split(",")]
+        skip_list = [i for i in range(1, num_sim+1) if i not in trial_num_ints]
+
+    for trial in range(1, num_sim+1):
+        result_path1 = clade_dir + f"/{trial}/results/{method1}/{results_name}"
+        result_path2 = clade_dir + f"/{trial}/results/{method2}/{results_name}"
+
+        # Skip any trials you don't want (e.g., inference on them hasn't finished for this run)
+        if trial in skip_list:
+            continue
+        
+        try:
+            # Convert lists to map of clade -> (est_support, in_tree)
+            with open(result_path1, "rb") as f:
+                results1 = pickle.load(f)
+                results1 = {result[0]: (result[1], result[2]) for result in results1 if len(result[0]) > 1}
+            with open(result_path2, "rb") as f:
+                results2 = pickle.load(f)
+                results2 = {result[0]: (result[1], result[2]) for result in results2 if len(result[0]) > 1}
+
+            # Create list (node, est1, est2, in_tree)
+            paired_results = []
+            for node1 in results1.keys():
+                in_tree = results1[node1][1]
+                est1 = results1[node1][0]
+                if node1 in results2:
+                    est2 = results2[node1][0]
+                else:
+                    est2 = 0
+                paired_results.append((node1, est1, est2, in_tree))
+                
+            print(trial)
+
+            a=-1
+            x_in = []
+            y_in = []
+            x_in.extend([est1 for node, est1, est2, in_tree in paired_results if in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+            y_in.extend([est2 for node, est1, est2, in_tree in paired_results if in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+            x_out = []
+            y_out = []
+            x_out.extend([est1 for node, est1, est2, in_tree in paired_results if not in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+            y_out.extend([est2 for node, est1, est2, in_tree in paired_results if not in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+
+            x = x_in.copy()
+            x.extend(x_out)
+            y = y_in.copy()
+            y.extend(y_out)
+
+            data = np.array([x, y]).T
+            df = pd.DataFrame(data, columns = [method1, method2])
+            plot_scatter_with_line(df, method1, method2, out_path+f'/{trial}_{method1}_{method2}.png')
+            
+            correlation = stats.pearsonr(y, x)
+            print("\tCorrelation:", correlation)
+            
+            plt.clf()
+            plt.scatter(x_in, y_in, alpha = 0.5, label="In tree")
+            plt.scatter(x_out, y_out, alpha = 0.3, label="Not in tree")
+            plt.xlabel(f"{method1} estimated supports")
+            plt.ylabel(f"{method2} estimated supports")
+            plt.legend()
+            plt.savefig(out_path + f"/{trial}_{method1}_{method2}_scatter.png")
+
+        except:
+            print(f"---- Skipping {clade_dir} {trial} ----")
+            continue
+    
+
+
+@click.command("compare_clade_results")
+@click.option('--clade_dir', '-c', help='path to clade directory.')
+@click.option('--out_path', '-o', help='output path to store figures/tables in.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
+@click.option('--trial_nums', '-t', help='the simulations to average over.')
+@click.option('--method1', '-m1', default='historydag')
+@click.option('--method2', '-m2', default='mrbayes')
+def compare_clade_results(clade_dir, out_path, method1, method2, results_name, trial_nums=None):
+    """
+    Given two methods and the name of their results files, plots a scatter plot of their
+    estimated supports.
+    
+    Uses only the nodes in method1 #TODO: Might wanna change this
+
+    E.g.,
+        python support_pipeline/plotting.py compare_clade_results \
+        -c /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108 \
+        -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/figures \
+        -t 37,55,16,81,38,61,97,78,26,73,20,33,84,85,28,60,25,36,96,35,40,52,39,74 
+    
+    """
+    # NOTE: Uncomment if you want to run from scratch
+    # num_sim = 100
+    # skip_list = []
+    # # print("Raw trial nums:", trial_nums)
+    # if trial_nums is not None:
+    #     trial_num_ints = [int(n) for n in trial_nums.split(",")]
+    #     skip_list = [i for i in range(1, num_sim+1) if i not in trial_num_ints]
+
+    # result_dict = {}
+    # for trial in range(1, num_sim+1):
+    #     result_path1 = clade_dir + f"/{trial}/results/{method1}/{results_name}"
+    #     result_path2 = clade_dir + f"/{trial}/results/{method2}/{results_name}"
+
+    #     # Skip any trials you don't want (e.g., inference on them hasn't finished for this run)
+    #     if trial in skip_list:
+    #         continue
+        
+    #     try:
+    #         # Convert lists to map of clade -> (est_support, in_tree)
+    #         with open(result_path1, "rb") as f:
+    #             results1 = pickle.load(f)
+    #             results1 = {result[0]: (result[1], result[2]) for result in results1 if len(result[0]) > 1}
+    #         with open(result_path2, "rb") as f:
+    #             results2 = pickle.load(f)
+    #             results2 = {result[0]: (result[1], result[2]) for result in results2 if len(result[0]) > 1}
+
+    #         # Create list (node, est1, est2, in_tree)
+    #         paired_results = []
+    #         for node1 in results1.keys():
+    #             in_tree = results1[node1][1]
+    #             est1 = results1[node1][0]
+    #             if node1 in results2:
+    #                 est2 = results2[node1][0]
+    #             else:
+    #                 est2 = 0
+    #             paired_results.append((node1, est1, est2, in_tree))
+                
+    #         result_dict[trial] = paired_results
+    #         print(trial)
+    #     except:
+    #         print(f"\tSkipping {clade_dir} {trial}")
+    #         continue
+    
+    # if len(result_dict) == 0:
+    #     print("\n==>No results to print :(\n")
+    #     return
+    
+    # with open(f"{out_path}_comparsion_{method1}_{method2}.pkl", "wb") as f:
+    #     pickle.dump(result_dict, f)
+
+    with open(f"{out_path}_comparsion_{method1}_{method2}.pkl", "rb") as f:
+        result_dict = pickle.load(f)
+
+    a=0.125
+    x_in = []
+    y_in = []
+    for trial, results in result_dict.items():
+        x_in.extend([est1 for node, est1, est2, in_tree in results if in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+        y_in.extend([est2 for node, est1, est2, in_tree in results if in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+    x_out = []
+    y_out = []
+    for trial, results in result_dict.items():
+        x_out.extend([est1 for node, est1, est2, in_tree in results if not in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+        y_out.extend([est2 for node, est1, est2, in_tree in results if not in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+
+    x = x_in.copy()
+    x.extend(x_out)
+    y = y_in.copy()
+    y.extend(y_out)
+
+    data = np.array([x, y]).T
+    df = pd.DataFrame(data, columns = [method1, method2])
+    plot_scatter_with_line(df, method1, method2, out_path+f'/clade_comparison_{method1}_{method2}.png')
+    
+    correlation = stats.pearsonr(y, x)
+    print("Correlation:", correlation)
+    
+    
+    # plt.scatter(x_in, y_in, alpha = 0.3, label="In tree")
+    # plt.scatter(x_out, y_out, alpha = 0.3, label="Not in tree")
+    # plt.xlabel(f"{method1} estimated supports")
+    # plt.ylabel(f"{method2} estimated supports")
+    # plt.legend()
+    # plt.savefig(out_path + f"/clade_comparison_{method1}_{method2}.png")
+
+
+
+cli.add_command(coverage_trial_plot)
+cli.add_command(compare_trial_results)
+cli.add_command(clade_results)
+cli.add_command(compare_clade_results)
+
+###################################################################################################
+# NOTE: Methods below here have not been thoroughly checked                                       #
+###################################################################################################
 
 @click.command("agg_pars_weights")
 @click.option('--input', '-i', help='file path to input list as a pickle.')

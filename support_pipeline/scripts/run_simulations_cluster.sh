@@ -20,8 +20,8 @@ eval "$(conda shell.bash hook)"
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
-mkdir -p data
-cd data
+mkdir -p data_new_sim
+cd data_new_sim
 
 # Get sarscov usher tree and reference sequence
 bigtree=public-2022-10-01.all.masked.pb.gz

@@ -114,3 +114,4 @@ def reroot(new_root):
     list(curr_child.children)[0].delete()
 
     return curr_child
+

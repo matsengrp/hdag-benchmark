@@ -2,8 +2,12 @@ import random
 import pickle
 from collections import Counter
 from math import isclose
+import numpy as np
+import matplotlib.pyplot as plt
 
-def sliding_window_plot_old(results, std_dev=False, sup_range=False, window_size=200):
+from scipy.stats import linregress, t
+
+def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
 
     results.sort(key= lambda result: result[1])
@@ -12,8 +16,8 @@ def sliding_window_plot_old(results, std_dev=False, sup_range=False, window_size
     devs, min_sup, max_sup = [], [], []
     side_len = int(window_size/2)
     for i, (_, est_sup, in_tree) in enumerate(results):
-        if i % (len(results)//10) == 0:
-            print("\t", i)
+        # if i % (len(results)//10) == 0:
+        #     print("\t", i)
         x.append(est_sup)
         window = [int(el[2]) for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
         y.append(sum(window) / len(window))
@@ -28,8 +32,15 @@ def sliding_window_plot_old(results, std_dev=False, sup_range=False, window_size
         elif sup_range:
             support_window = [el[1] for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
             # First and fourth quartiles
-            min_sup.append(support_window[int(len(support_window)/4)])
-            max_sup.append(support_window[-int(len(support_window)/4)])
+            if i - len(support_window)/2 <= 0:
+                min_sup.append(support_window[0])
+            else:
+                min_sup.append(support_window[int(len(support_window)/4)])
+            
+            if i + len(support_window)/2 >= window_size:
+                max_sup.append(support_window[-1])
+            else:
+                max_sup.append(support_window[-int(len(support_window)/4)])
 
     if std_dev:
         pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
@@ -40,63 +51,89 @@ def sliding_window_plot_old(results, std_dev=False, sup_range=False, window_size
     else:
         return x, y
 
+# def plot_scatter_with_line(df, x_col, y_col, save_path):
+#     # Extract the data from the dataframe
+#     x = df[x_col]
+#     y = df[y_col]
 
-# def sliding_window_plot_new(results, std_dev=False, sup_range=False, window_size=200):
-#     """Given list of results tuples returns xy coords of sliding window plot."""
+#     # Calculate the line of best fit
+#     coefficients = np.polyfit(x, y, 1)
+#     polynomial = np.poly1d(coefficients)
+#     line_of_best_fit = polynomial(x)
 
-#     results.sort(key= lambda result: result[1])
+#     # Plot the scatter plot and line of best fit
+#     plt.scatter(x, y, label='Data Points', color='blue')
+#     plt.plot(x, line_of_best_fit, color='red', label='Line of Best Fit')
 
-#     x, y = [], []
-#     devs, min_sup, max_sup = [], [], []
-#     side_len = int(window_size/2)
-#     true_vals = Counter(res[2] for res in results[0 : min(len(results), side_len)])
-#     sum_estimates = sum(res[1] for res in results[0: min(len(results), side_len)])
-#     first_idx = 0
-#     first_full_window_end_idx = min(len(results), window_size - 1)
+#     # Set plot labels and title
+#     plt.xlabel(x_col)
+#     plt.ylabel(y_col)
+#     plt.title('Scatter Plot with Line of Best Fit')
 
-#     for central_idx in range(len(results)):
-#         proposed_first_idx = central_idx - side_len
-#         proposed_last_idx = central_idx + side_len
+#     # Add legend
+#     plt.legend()
 
-#         # Adjust the window appropriately
-#         if proposed_first_idx > first_idx:
-#             assert proposed_first_idx - first_idx == 1
-#             sum_estimates -= results[first_idx][1]
-#             true_vals.subtract([results[first_idx][2]])
-#             first_idx = proposed_first_idx
-#         if proposed_last_idx < len(results):
-#             sum_estimates += results[proposed_last_idx][1]
-#             true_vals.update([results[proposed_last_idx][2]])
-#         last_idx = min(proposed_last_idx, len(results))
+#     # Save the plot
+#     plt.savefig(save_path)
 
-#         this_window_size = sum(true_vals.values())
-#         x.append(results[central_idx][1])
-#         # #This would do averages instead of medians, but it doesn't seem to
-#         # #work correctly..
-#         # x.append(sum_estimates / this_window_size)
-#         y.append(true_vals[1] / this_window_size)
-#         # Standard deviations are over the window of in_true_tree variable (ie 1 or 0)
-#         if std_dev:
-#             avg = y[-1]
-#             sq_diff = [el_count * (el - avg)**2 for el, el_count in true_vals.values()]
-#             devs.append((sum(sq_diff) / this_window_size))
+#     # Show the plot (optional)
+#     plt.show()
 
-#         # Quartiles are between estimated support values
-#         elif sup_range:
-#             # First and fourth quartiles
-#             min_sup.append(results[first_idx + int(this_window_size/4)])
-#             max_sup.append(support_window[last_idx - int(this_window_size/4)])
 
-#     if std_dev:
-#         pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
-#         neg_devs = [y_val - dev for y_val, dev in zip(y, devs)]
-#         return x, y, pos_devs, neg_devs
-#     elif sup_range:
-#         return x, y, min_sup, max_sup
-#     else:
-#         return x, y
 
-def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
+def plot_scatter_with_line(df, x_col, y_col, save_path):
+    # Extract the data from the dataframe
+    x = df[x_col]
+    y = df[y_col]
+
+    idxs = np.argsort(x)
+    x = x[idxs]
+    y = y[idxs]
+
+    # Perform Pearson correlation test
+    correlation = np.corrcoef(x, y)[0, 1]
+    slope, intercept, r, p_value, se = linregress(x, y)
+
+    # Calculate the line of best fit
+    line_of_best_fit = slope * x + intercept
+
+    # Calculate confidence intervals
+    y_err = y - line_of_best_fit
+    mean_x = np.mean(x)
+    n = len(x)
+    dof = n - 2  # degrees of freedom
+    alpha = 0.05  # Significance level (1 - confidence level)
+    t_critical = t.ppf(1 - alpha / 2, dof)  # Calculate the critical value
+    confidence_interval = t_critical * np.sqrt((np.sum(y_err ** 2) / dof) * (1.0 / n + (x - mean_x) ** 2 / np.sum((x - mean_x) ** 2)))
+
+    # Plot the scatter plot and line of best fit
+    plt.clf()
+    plt.scatter(x, y, label='Data Points', alpha=0.1)
+    plt.plot(x, line_of_best_fit, color='red', label='Line of Best Fit')
+
+    # Plot confidence intervals
+    plt.fill_between(x, line_of_best_fit - confidence_interval, line_of_best_fit + confidence_interval, color='orange', alpha=0.4, label='Confidence Intervals')
+
+    # Set plot labels and title
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title('Scatter Plot with Line of Best Fit')
+
+    # Add correlation coefficient, p-value, and critical value to the plot
+    text = f'Correlation: {correlation:.2f}\np-value: {p_value:.4f}\nCritical Value: {t_critical:.4f}'
+    plt.text(0.95, 0.05, text, transform=plt.gca().transAxes, ha='right', va='bottom', bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round'))
+
+    # Add legend
+    plt.legend()
+
+    # Save the plot
+    plt.savefig(save_path)
+
+    # Show the plot (optional)
+    plt.show()
+
+
+def sliding_window_plot_new(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
     side_len = window_size // 2
     window_size = side_len * 2 + 1

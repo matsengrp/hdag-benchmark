@@ -2,7 +2,9 @@ import click
 import ete3 as ete
 import json
 from collections import Counter
-from historydag.parsimony import parsimony_score, sankoff_upward, sankoff_upward
+from historydag.parsimony import parsimony_score, sankoff_upward, sankoff_upward, load_fasta
+from scipy.stats import entropy
+import matplotlib.pyplot as plt
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
@@ -179,8 +181,70 @@ def get_tree_stats(sim_dir):
     with open(outfile, "w") as f:
         f.write(json.dumps(stats_dict, indent=4))
 
+
+@click.command("sitewise_entropy")
+@click.option('--trial', '-t', help='the trial to compare entropy on.')
+def sitewise_entropy(trial):
+    """
+    Computes the sitewise entropy for a fasta file in the given simulation directory
+    """
+    base_dir = "/fh/fast/matsen_e/whowards/hdag-benchmark"
+    hist_data = {}
+
+    for data_dir in ['data', 'data_new_sim']:
+        fasta_path = base_dir + f"/{data_dir}/AY.108/{trial}/simulation/collapsed_simulated_tree.nwk.variant_sites_with_refseq.fasta"
+        fasta = load_fasta(fasta_path)
+        fasta_keys = list(fasta.keys())
+
+        site_distr = {}
+        site_entr = {}
+        for site_idx in range(len(fasta['ancestral'])):
+            site_distr[site_idx] = Counter()
+            for k in fasta_keys:
+                site_distr[site_idx][fasta[k][site_idx]] += 1
+            site_entr[site_idx] = entropy(list(site_distr[site_idx].values()))
+
+            print(list(site_distr[site_idx].values()), site_entr[site_idx])
+
+        hist_data[data_dir] = [v for v in site_entr.values() if v > 0]
+        
+
+    fasta_path = base_dir + f"/{data_dir}/AY.108/real/real_seqs.fasta"
+    fasta = load_fasta(fasta_path)
+    fasta_keys = list(fasta.keys())
+
+    site_distr = {}
+    site_entr = {}
+    for site_idx in range(len(list(fasta.values())[0])):
+        site_distr[site_idx] = Counter()
+        for k in fasta_keys:
+            site_distr[site_idx][fasta[k][site_idx]] += 1
+        site_entr[site_idx] = entropy(list(site_distr[site_idx].values()))
+
+        if site_entr[site_idx] > 0:
+            print(list(site_distr[site_idx].values()), site_entr[site_idx])
+
+    hist_data["real"] = [v for v in site_entr.values() if v > 0]
+
+    max_val = 0
+    for k, v in hist_data.items():
+        max_val = max(max(v), max_val)
+
+    bins = [el / 20 for el in range(0, int(max_val * 20) + 5)]
+    # for k, v in hist_data.items():
+    #     plt.hist(v, label=k, bins=bins, alpha=0.3)
+    plt.hist([hist_data["real"], hist_data['data'], hist_data['data_new_sim']], bins=bins, label=["Real", "Hypermutation", "MAPLE sim"])
+
+    plt.legend()
+    plt.yscale('log')
+    plt.savefig(base_dir + f"/data/AY.108/{trial}/simulation/entropy_histogram.png")
+
+    
+
+
 cli.add_command(parse_clade_stats)
 cli.add_command(get_tree_stats)
+cli.add_command(sitewise_entropy)
 
 if __name__ == '__main__':
     cli()

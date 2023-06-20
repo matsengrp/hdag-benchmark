@@ -23,12 +23,12 @@ eval "$(conda shell.bash hook)"
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
-t=$(cat $trial_file.txt)
 for clade in $(cat clades.txt); do
     # if value of $var starts with #, ignore it
     [[ $clade =~ ^#.* ]] && continue
 
-    cladedir=data/$clade
+    cladedir=data_new_sim/$clade
+    t=$(cat $cladedir/$trial_file.txt)
 
     for trial in $t; do
     # for trial in $(seq $num_trials); do
@@ -36,8 +36,8 @@ for clade in $(cat clades.txt); do
         outdir=$cladedir/$trial/figures/$method
         mkdir -p $outdir
 
-        # results=$cladedir/$trial/results/$method/results.pkl
-        # python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
+        results=$cladedir/$trial/results/$method/results.pkl
+        python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
         
         # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
         # python support_pipeline/plotting.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
@@ -54,7 +54,6 @@ for clade in $(cat clades.txt); do
     # Convert space seperated list of trials to comma separated
     echo $t | tr " " "," > script_temp.txt
     t_comma=$(cat script_temp.txt)
-    rm script_temp.txt
 
     python support_pipeline/plotting.py clade_results \
     -n $num_trials \
@@ -86,3 +85,19 @@ for clade in $(cat clades.txt); do
 
     # python support_pipeline_scripts/cli.py pars_weight_clade_results -n $num_trials -c $cladedir -o $outdir -m $method
 done
+
+# trial=5;
+# mkdir /fh/fast/matsen_e/whowards/hdag-benchmark/data_new_sim/AY.108/real/$trial/figures;
+# python support_pipeline/plotting.py coverage_trial_plot \
+# -i /fh/fast/matsen_e/whowards/hdag-benchmark/data_new_sim/AY.108/real/$trial/results/historydag/results.pkl \
+# -o /fh/fast/matsen_e/whowards/hdag-benchmark/data_new_sim/AY.108/real/$trial/figures \
+# -c AY.108 \
+# -w 0.2 \
+# -m historydag
+
+python support_pipeline/plotting.py clade_results \
+-n 5 \
+-c /fh/fast/matsen_e/whowards/hdag-benchmark/data_new_sim/AY.108/real \
+-m historydag \
+-r results.pkl \
+-o /fh/fast/matsen_e/whowards/hdag-benchmark/data_new_sim/AY.108/real/figures/CA_support.png

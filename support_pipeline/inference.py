@@ -48,7 +48,7 @@ def save_supports(method, tree_path, input_path, output_path):
     -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/simulation/collapsed_simulated_tree.nwk \
     -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/final_opt_dag.pb \
     -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/results_adj.pkl
-        """
+    """
 
     # Map of taxon id (e.g., s1, s4, etc) to full sequence
     fasta_path = tree_path + ".fasta"

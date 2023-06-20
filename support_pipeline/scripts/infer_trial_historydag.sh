@@ -11,7 +11,7 @@ currdir=$1
 clade=$2
 trial=$3
 
-datadir=$currdir/data
+datadir=$currdir/data_new_sim
 trialdir=$datadir/$clade/$trial
 simdir=$trialdir/"simulation"
 resultsdir=$trialdir/"results"
@@ -46,8 +46,7 @@ python ../support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile 
 # TODO: Rename 'hdag-...' -> 'historydag-...' and change save_supports method accordingly
 # NOTE: Saves single results list for MP trimmed node support
 # python ../support_pipeline/inference.py save_supports -m "hdag-adj" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/adjusted_support_results.pkl
-# TODO: Change back to optdag_final
-python ../support_pipeline/inference.py save_supports -m "hdag-inf" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl
+python ../support_pipeline/inference.py save_supports -m "hdag" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl
 
 # NOTE: Tests different trimming strategies for uniform node support.
 # python ../support_pipeline/inference.py trim_thresholds -t $ctree -i $optdag_final -o $dagdir/strat_dict.pkl
