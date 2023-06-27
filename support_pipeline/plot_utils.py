@@ -4,7 +4,6 @@ from collections import Counter
 from math import isclose
 import numpy as np
 
-
 import matplotlib.pyplot as plt
 from scipy.stats import linregress, t
 

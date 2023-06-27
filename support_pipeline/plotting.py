@@ -3,6 +3,8 @@ import random
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import stats
+from scipy.stats import linregress, t
 import pandas as pd
 import seaborn as sns
 sns.set_theme()
@@ -14,7 +16,8 @@ from collections import Counter
 
 from historydag import parsimony_utils
 import historydag as hdag
-from plot_utils import sliding_window_plot, get_results_full, bin_hist_plot
+from plot_utils import sliding_window_plot, get_results_full, bin_hist_plot, plot_scatter_with_line
+
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
@@ -162,13 +165,13 @@ def compare_trial_results(clade_dir, out_path, method1, method2, results_name, t
     Uses only the nodes in method1 #TODO: Might wanna change this
 
     E.g.,
-python support_pipeline/plotting.py compare_trial_results \
--c /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108 \
--o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/figures/clade_comparison_trials \
--t 37,55,16,81,38,61,97,78,26,73,20,33,84,85,28,60,25,36,96,35,40,52,39,74 
+        python support_pipeline/plotting.py compare_trial_results \
+        -c /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108 \
+        -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/figures/clade_comparison_trials \
+        -t 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25
     
     """
-    num_sim = 100
+    num_sim = 25
     skip_list = []
     # print("Raw trial nums:", trial_nums)
     if trial_nums is not None:
@@ -256,14 +259,13 @@ def compare_clade_results(clade_dir, out_path, method1, method2, results_name, t
     Uses only the nodes in method1 #TODO: Might wanna change this
 
     E.g.,
-        python support_pipeline/plotting.py compare_clade_results \
-        -c /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108 \
-        -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/figures \
-        -t 37,55,16,81,38,61,97,78,26,73,20,33,84,85,28,60,25,36,96,35,40,52,39,74 
+python support_pipeline/plotting.py compare_clade_results \
+-c /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108 \
+-o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/figures \
+-t 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25
     
     """
-    # NOTE: Uncomment if you want to run from scratch
-    # num_sim = 100
+    # num_sim = 25
     # skip_list = []
     # # print("Raw trial nums:", trial_nums)
     # if trial_nums is not None:
@@ -302,7 +304,7 @@ def compare_clade_results(clade_dir, out_path, method1, method2, results_name, t
     #         result_dict[trial] = paired_results
     #         print(trial)
     #     except:
-    #         print(f"\tSkipping {clade_dir} {trial}")
+    #         print(f"\t--- Skipping {clade_dir} {trial} ---")
     #         continue
     
     # if len(result_dict) == 0:
@@ -315,7 +317,7 @@ def compare_clade_results(clade_dir, out_path, method1, method2, results_name, t
     with open(f"{out_path}_comparsion_{method1}_{method2}.pkl", "rb") as f:
         result_dict = pickle.load(f)
 
-    a=0.125
+    a=0.025
     x_in = []
     y_in = []
     for trial, results in result_dict.items():

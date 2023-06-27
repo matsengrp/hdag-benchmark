@@ -402,7 +402,7 @@ def get_mrbayes_trees(trees_file):
                 yield tree
 
 # TODO: Determine burnin and sample_freq from the input file
-def mrbayes_output(node_set, tree_file, burnin=1e7, sample_freq=1000):
+def mrbayes_output(node_set, tree_file, burnin=2e7, sample_freq=1000):
     """Same as hdag output, but for MrBayes"""
     node2support = {}
     tree_count = 0
