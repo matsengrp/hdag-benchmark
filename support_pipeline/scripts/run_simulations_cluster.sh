@@ -9,8 +9,9 @@
 #   5. Store leaf sequences, ancestral sequence, and simulated tree
 
 # Paramaters that determine how many trees to simulate for each clade
-num_res=10
-num_sim=10
+num_res=5
+num_sim=5
+num_cores=4
 
 echo ""
 echo "=> Simulating trees..."
@@ -71,7 +72,7 @@ for clade in $(cat ../clades.txt); do
             simdir=$clade/$trial/"simulation"
             mkdir -p $simdir
 
-            sbatch -c 1 -J "$trial|$clade|sim" -o $simdir/sim.log \
+            sbatch -c $num_cores -J "$trial|$clade|sim" -o $simdir/sim.log \
             ./../support_pipeline/scripts/simulate_trial.sh $PWD $rseed $sim $simdir $rtree
         done
     done

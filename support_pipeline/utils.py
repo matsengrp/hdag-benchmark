@@ -19,7 +19,7 @@ from collections import Counter
 
 import historydag as hdag
 from historydag import parsimony_utils
-from historydag.parsimony import parsimony_score, sankoff_upward, build_tree, sankoff_upward
+from historydag.parsimony import parsimony_score, sankoff_upward, build_tree, sankoff_upward, load_fasta
 from historydag.utils import count_labeled_binary_topologies
 
 def get_true_nodes(tree_path):
@@ -114,3 +114,39 @@ def reroot(new_root):
     list(curr_child.children)[0].delete()
 
     return curr_child
+
+
+def get_history(ete_tree_path, fasta_path, dag):
+    """
+    Given a path to a newick and DAG, returns a historyDAG containing a single history.
+    """
+    # TODO: Build ete tree with label attributes `sequence` containing the full nuc seqs at each node
+    ete_tree = ete.Tree(ete_tree_path)
+    id2seq = load_fasta(fasta_path)
+
+    for node in ete_tree.traverse("postorder"):
+        if node.is_leaf():
+            node.add_feature("sequence", id2seq[node.name])
+        else:
+            prev_seq = None
+            for child in node.children:
+                new_seq = list(child.sequence)
+                for mut in child.mutations.split("|"):
+                    if len(mut) < 3:
+                        continue
+                    to = mut[0]
+                    curr = mut[-1]
+                    idx = int(mut[1:-1])-1
+                    assert new_seq[idx] == curr
+                    new_seq[idx] = to
+                if prev_seq is not None:
+                    assert new_seq == prev_seq
+                prev_seq = new_seq
+    
+            node.add_feature("sequence", "".join(new_seq))
+
+    seq_history = hdag.from_tree(ete_tree, label_features=["sequence"]) # ete_tree
+    history = hdag.mutation_annotated_dag.CGHistoryDag.from_history_dag(seq_history, 
+            reference=next(dag.postorder()).label.compact_genome.reference)
+
+    return history

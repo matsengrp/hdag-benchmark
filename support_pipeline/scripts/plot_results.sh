@@ -8,11 +8,10 @@
 
 set -eu
 method=$1
-trial_file="pars_div_trials"
 
 
-num_res=10
-num_sim=10
+num_res=5
+num_sim=5
 let "num_trials = $num_sim * $num_res"
 
 echo ""
@@ -23,30 +22,32 @@ eval "$(conda shell.bash hook)"
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
-t=$(cat $trial_file.txt)
 for clade in $(cat clades.txt); do
     # if value of $var starts with #, ignore it
     [[ $clade =~ ^#.* ]] && continue
 
     cladedir=data/$clade
+    trial_file="$cladedir/pars_div_trials"
+    t=$(cat $trial_file.txt)
 
-    for trial in $t; do
-    # for trial in $(seq $num_trials); do
-        echo "$clade: $trial"
-        outdir=$cladedir/$trial/figures/$method
-        mkdir -p $outdir
+    # TODO: Make a script for plotting clade results separate from trial results
+    
+    # for trial in $t; do
+    #     echo "$clade: $trial"
+    #     outdir=$cladedir/$trial/figures/$method
+    #     mkdir -p $outdir
 
-        # results=$cladedir/$trial/results/$method/results.pkl
-        # python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
+    #     results=$cladedir/$trial/results/$method/results.pkl
+    #     python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
         
-        # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
-        # python support_pipeline/plotting.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
-        # python support_pipeline/plotting.py bin_pars_weights -i $results -o $outdir -c $clade -b 0.05 -m $method
+    #     # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
+    #     # python support_pipeline/plotting.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
+    #     # python support_pipeline/plotting.py bin_pars_weights -i $results -o $outdir -c $clade -b 0.05 -m $method
 
-        # dag_path=$cladedir/$trial/results/$method/final_opt_dag.pb
-        # python support_pipeline/plotting.py cumul_pars_weight -i $dag_path -o $outdir -p -0.1
+    #     # dag_path=$cladedir/$trial/results/$method/final_opt_dag.pb
+    #     # python support_pipeline/plotting.py cumul_pars_weight -i $dag_path -o $outdir -p -0.1
 
-    done
+    # done
 
     outdir=$cladedir/figures/$method
     mkdir -p $outdir
@@ -54,7 +55,7 @@ for clade in $(cat clades.txt); do
     # Convert space seperated list of trials to comma separated
     echo $t | tr " " "," > script_temp.txt
     t_comma=$(cat script_temp.txt)
-    rm script_temp.txt
+    # rm script_temp.txt
 
     python support_pipeline/plotting.py clade_results \
     -n $num_trials \

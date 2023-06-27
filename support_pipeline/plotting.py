@@ -110,7 +110,7 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
         window_size = 100
     else:
         # window_size = int(len(results_full) * window_proportion)
-        window_size=100
+        window_size = 50
 
     # Sliding window plot
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)

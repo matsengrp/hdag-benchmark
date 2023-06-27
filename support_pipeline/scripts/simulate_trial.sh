@@ -14,6 +14,7 @@ sim=$3
 simdir=$4
 rtree=$5
 
+
 echo $1
 echo $2
 echo $3
@@ -24,15 +25,16 @@ echo $5
 cd $curr_dir
 
 # Simulate mutations on the tree until we get one without convergent evolution
-for seed in $(seq 50); do
+for seed in $(seq 100); do
     # Seed is also printed to sim.log
-    let "s = $seed + ($sim-1) * 10 + ($rseed-1) * 100"
+    let "s = $seed-1 + ($sim-1) * 10 + ($rseed-1) * 100"
     
     phastSim --outpath $simdir/ --seed $s --createFasta --createInfo \
             --createNewick --createPhylip --treeFile $rtree \
-            --scale 0.0000345 --invariable 0.1 --alpha 1.0 \
-            --hyperMutProbs 0.01 0.01 --hyperMutRates 20.0 200.0 \
-            --reference refseq.fasta --eteFormat 1
+            --scale 0.00003344 \
+            --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 \
+            --reference refseq.fasta --eteFormat 1 \
+            --hyperMutProbs 0.001 0.0001 --hyperMutRates 20.0 200.0
     
     simtree=$simdir/sars-cov-2_simulation_output.tree
     simfasta=$simdir/sars-cov-2_simulation_output.fasta
@@ -44,15 +46,27 @@ for seed in $(seq 50); do
     # produces ctreefasta_with_refseq which doesn't contain reference sequence
     # throws error message if tree exhibits convergent evolution
     if hdb collapse-tree $simtree $simfasta $ctree; then
-        echo "seed $s"
-        break
+
+        cp refseq.fasta $ctreefasta_with_refseq
+        cat $ctreefasta >> $ctreefasta_with_refseq
+        # This will treat the first sequence (`ancestral`) in the vcf as the
+        # reference, but not include it as a sample in the vcf.
+        ctreevcf=${ctreefasta_with_refseq}.vcf
+        faToVcf $ctreefasta_with_refseq $ctreevcf
+
+        # TODO: Add component that checks MP tree on this data
+        if hdb get-tree-stats -s $simdir; then
+            echo "seed $s"
+            break
+        fi
     fi
 done
-cp refseq.fasta $ctreefasta_with_refseq
-cat $ctreefasta >> $ctreefasta_with_refseq
-# This will treat the first sequence (`ancestral`) in the vcf as the
-# reference, but not include it as a sample in the vcf.
-ctreevcf=${ctreefasta_with_refseq}.vcf
-faToVcf $ctreefasta_with_refseq $ctreevcf
 
-python ../support_pipeline/simulation.py get_tree_stats -s $simdir
+hdb get-tree-stats -s $simdir
+
+# bash support_pipeline/scripts/simulate_trial.sh \
+# "/fh/fast/matsen_e/whowards/hdag-benchmark/data" \
+# "2" \
+# "2" \
+# "/fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/2/simulation" \
+# "/fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/resolved/2/rtree.nwk"

@@ -2,7 +2,7 @@ import click
 import ete3 as ete
 import json
 from collections import Counter
-from historydag.parsimony import parsimony_score, sankoff_upward, sankoff_upward
+from historydag.parsimony import parsimony_score, sankoff_upward
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():

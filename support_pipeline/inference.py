@@ -18,7 +18,7 @@ from historydag import parsimony_utils
 from historydag.parsimony import build_tree
 from historydag.utils import count_labeled_binary_topologies
 
-from utils import get_true_nodes, make_results_list, reroot
+from utils import get_true_nodes, make_results_list, reroot, get_history
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
@@ -61,7 +61,7 @@ def save_supports(method, tree_path, input_path, output_path):
     if method == "hdag":
         p = "inf"
         adjust = False
-        support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)
+        support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust, true_tree_path=tree_path)
     elif method[0:5] == "hdag-":
         if method[5:] == "inf":
             p = "inf"
@@ -95,7 +95,7 @@ def save_supports(method, tree_path, input_path, output_path):
 ###     hDAG    ###################################################################################
 ###################################################################################################
 
-def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=False, adjust=False):
+def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=False, adjust=False, true_tree_path=None):
     """
     Uses a generalized node support that can consider non-MP trees and weights them as a functions
     of their parsiomny score.
@@ -134,11 +134,24 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
     if isinstance(pars_weight, str):
         # This recovers uniform distribution over MP trees
         dag.trim_optimal_weight()
-        pscore_fn = lambda n1, n2: 1
+        pscore_fn = lambda n1, n2: 0
     else:
         pscore_fn = lambda n1, n2: -pars_weight * parsimony_utils.hamming_cg_edge_weight(n1, n2)
 
-    print("=> DAG contains", dag.count_trees(), "trees")
+    num_trees = dag.count_trees()
+    print("=> DAG contains", num_trees, "trees")
+
+    if true_tree_path is not None:
+        print("Getting true history...")
+        true_history = get_history(true_tree_path, true_tree_path + ".fasta", dag)
+        # Confirm that the two DAGs have the same leaf set
+        assert {n.label for n in dag.get_leaves()} == {n.label for n in true_history.get_leaves()}
+
+        rf_counts = dag.count_rf_distances(true_history)
+        print("RF-distances to true tree:")
+        print(rf_counts)
+        # TODO: If the true tree is not contained in the DAG, you could add it and see how much
+        #       support improves
 
     if bifurcate:
         def bifurcation_correction(node):
@@ -149,6 +162,7 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
         dag.probability_annotate(lambda n1, n2: bifurcation_correction(n2), log_probabilities=False)
         log_prob = False
     else:
+        # TODO: Refactor to use dag.uniform_annotate
         dag.probability_annotate(lambda n1, n2: pscore_fn(n1, n2), log_probabilities=True)
         log_prob = True
 
@@ -303,10 +317,10 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
     subprocess.run(["mkdir", "-p", f"{log_dir}_1"])
     args = [executable,
             "-i", f"{input}",
-            "-c", f"{round(int(count)/2)}",
+            "-c", f"{round(int(count))}",
             "-o", f"{out_dir}/opt_dag_1.pb",
             "-l", f"{log_dir}_1",
-            "--move-coeff-nodes", str(5),
+            "--move-coeff-nodes", str(4),
             "--move-coeff-pscore", str(1),
             "--sample-any-tree"
             ]
@@ -318,12 +332,11 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
     subprocess.run(["mkdir", "-p", f"{log_dir}_2"])
     args = [executable,
             "-i", f"{out_dir}/opt_dag_1.pb",
-            "-c", f"{round(int(count)/6)}",
+            "-c", f"{round(int(count))}",
             "-o", f"{out_dir}/opt_dag_2.pb",
             "-l", f"{log_dir}_2",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(1),
-            # "--sample-best-tree"
+            "--move-coeff-pscore", str(1)
             ]
     subprocess.run(args=args)
 
@@ -331,12 +344,11 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
     subprocess.run(["mkdir", "-p", f"{log_dir}_3"])
     args = [executable,
             "-i", f"{out_dir}/opt_dag_2.pb",
-            "-c", f"{round(int(count)/6)}",
+            "-c", f"{round(int(count))}",
             "-o", f"{out_dir}/opt_dag_3.pb",
             "-l", f"{log_dir}_3",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(3),
-            "--sample-any-tree"
+            "--move-coeff-pscore", str(3)
             ]
     subprocess.run(args=args)
 
@@ -352,11 +364,12 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
     subprocess.run(["mkdir", "-p", f"{log_dir}_complete"])
     args = [executable,
             "-i", f"{out_dir}/complete_opt_dag.pb",
-            "-c", f"{round(int(count)/6)}",
+            "-c", f"{round(int(count))}",
             "-o", f"{out_dir}/{final_dag_name}.pb",
             "-l", f"{log_dir}_complete",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(3)
+            "--move-coeff-pscore", str(3),
+            "--sample-any-tree"
             ]
     subprocess.run(args=args)
 

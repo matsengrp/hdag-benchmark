@@ -35,7 +35,7 @@ seqmagick convert $ctreefasta_with_refseq $ctreenexus --alphabet dna
 mrbayesoutput=$mrbayesdir/mrbayes-output
 
 # Produce .mb file describing the mrbayes run (including input and output files)
-python $currdir/support_pipeline_scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput > $mrbayesfile
+python $currdir/support_pipeline/scripts/python_replace.py $currdir/run.mb $ctreenexus $mrbayesoutput > $mrbayesfile
 /fh/fast/matsen_e/whowards/MrBayes/src/mb -i $mrbayesfile
 
 # Although the mrbayes-output.trprobs file contains the deduplicated

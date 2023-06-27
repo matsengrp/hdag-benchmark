@@ -10,6 +10,12 @@ import pickle
 import random
 import math
 
+# NOTE: These should probably be moved to a different folder..?
+import subprocess
+from collections import Counter
+import ete3 as ete
+from historydag.parsimony import parsimony_score, sankoff_upward
+import json
 
 # Entry point
 def safe_cli():
@@ -94,6 +100,8 @@ def collapse_tree(input_newick, input_fasta, output_newick):
         intree = ct.load_phastsim_newick(fh.read())
     infasta = load_fasta(input_fasta)
     outtree = ct.collapse_tree(intree, infasta)
+    # # TODO:
+    # ct.get_tree_stats(sim_dir)
 
     outtree.write(features=["mutations"], format_root_node=True, outfile=output_newick)
     variant_sites = set()
@@ -114,6 +122,155 @@ def collapse_tree(input_newick, input_fasta, output_newick):
             print('>' + seqname, file=fhvariants)
             print(infasta[seqname], file=fh)
             print(excise_variants(infasta[seqname]), file=fhvariants)
+
+# TODO: Maybe this should go in ct
+@cli.command()
+@click.option('--sim_dir', '-s', help='the folder containing TOI and fasta file.')
+def get_tree_stats(sim_dir):
+    """
+    Computes the parsimony score of the simulated tree, the maximum possible parsimony given the
+    topology, and the maximum parsimony on the leaves. Stores results as a json at sim_dir/tree_stats.json
+
+    Also computes statistics for the subsetted USHER tree. This can be useful for ensuring that
+    the simulations roughly match the real data. This script assumes the directory `sim_dir/..`
+    contains the USHER-subsetted newick tree tree.n.nwk.
+    """
+
+    var_sites_prefix = sim_dir + "/collapsed_simulated_tree.nwk.variant_sites"
+    with open(var_sites_prefix + ".txt", "r") as f:
+        idxs = f.readline().split()
+
+    with open(sim_dir + "/ctree_with_refseq.fasta", "r") as f:
+        name = f.readline().strip()[1:] # NOTE: Should be `ancestral`
+        seq = f.readline()              # Entire sequence
+        variants = ""                   # The character values of the nucs that vary
+        for i in idxs:
+            variants += seq[int(i)-1]
+
+    with open(var_sites_prefix + ".fasta", "r") as f:
+        var_sites = f.readlines()
+
+    with open(var_sites_prefix + "_with_refseq.fasta", "w") as f:
+        f.write(f">{name}\n")
+        f.write(f"{variants}\n")
+        for line in var_sites:
+            f.write(f"{line}")
+
+    subprocess.run([
+        "dnapars_parsimony_score.sh",
+        var_sites_prefix + "_with_refseq.fasta",    # infasta
+        name,                                       # root_name
+        sim_dir                                     # out_dir
+    ])
+    with open(sim_dir + "/dnapars_output.txt", "r") as f:
+        line = f.readline()
+        temp = line.strip().split(" ")
+        best_possible = float(temp[-1])
+    
+    tree_path = sim_dir + "/collapsed_simulated_tree.nwk"
+    tree = ete.Tree(tree_path) # Doesn't have internal names
+
+    multifurc_counts = Counter()
+    for node in tree.traverse():
+        if not node.is_leaf():
+            multifurc_counts[len(node.children)] += 1
+
+    fasta_path = sim_dir + "/ctree_with_refseq.fasta"   # ancestral seq in second line of this file
+    with open(fasta_path, "r") as f:
+        assert ">ancestral\n" == f.readline()
+        ancestral_seq = f.readline().strip()
+    
+    # build sequences from mutations
+    num_nodes = 0
+    num_leaves = 0
+    for node in tree.traverse("preorder"):
+        num_nodes += 1
+        if node.is_leaf():
+            num_leaves += 1
+        if node.is_root():
+            seq = ancestral_seq
+        else:
+            seq = node.up.sequence
+            if len(node.mutations) >= 1:
+                for mut in node.mutations.split("|"):
+                    mut = mut.strip()
+                    curr = mut[0]
+                    i = int(mut[1:-1])-1    # convert indices to 0-based
+                    new = mut[-1]
+                    assert seq[i] == curr
+                    seq = seq[:i] + new + seq[i + 1:]
+        
+        node.add_feature("sequence", seq)
+
+    # just counts mutations between simulated internal node sequences
+    tree_score = parsimony_score(tree)
+
+    # computes the best possible parsimony score of any labeling on tree's
+    # topology, with root sequence constrained.
+    # first replace all internal, non-root sequences with N's, then do
+    # sankoff_upward with use_internal_node_sequences True.
+    sankoff_tree = tree.copy()
+    for node in sankoff_tree.traverse():
+        if node.is_root() or node.is_leaf():
+            continue
+        else:
+            node.sequence = "N" * len(tree.sequence)
+    max_score = sankoff_upward(sankoff_tree, len(sankoff_tree.sequence), use_internal_node_sequences=True)
+
+    stats_dict = {
+        "num_leaves": num_leaves,
+        "num_nodes": num_nodes,
+        "pars_score": tree_score,
+        "max_score_top": max_score,
+        "max_score_data": best_possible,
+        "multifurc_distribution": multifurc_counts
+    }
+
+    print(f"MP with topology: {max_score}\t MP on data: {best_possible}")
+
+    # Add similar stats from the USHER tree
+    clade_dir = sim_dir.split("/")[0]
+    usher_tree_path = clade_dir + "/tree.n.nwk"
+    usher_tree = ete.Tree(usher_tree_path, format=1)
+    # Remove multifurcations
+    to_delete = []
+    for node in usher_tree.traverse():
+        # TODO: Add leaf check elsewhere as needed
+        if not node.is_root() and node.dist==0:
+            to_delete.append(node)
+    for node in to_delete:
+        node.delete(prevent_nondicotomic=False)
+    # Remove unifurcations
+    to_delete = [node for node in usher_tree.traverse() if len(node.children) == 1 and not node.is_root()]
+    for node in to_delete:
+        node.delete(prevent_nondicotomic=False)
+
+    pars = 0
+    multifurc_counts = Counter()
+    node_count = 0
+    leaf_count = 0
+    for node in usher_tree.traverse():
+        node_count += 1
+        if node.is_leaf():
+            leaf_count += 1
+        if not node.is_root():
+            pars += node.dist
+        if not node.is_leaf():
+            multifurc_counts[len(node.children)] += 1
+    
+    stats_dict["usher_num_leaves"] = leaf_count
+    stats_dict["usher_num_nodes"] = node_count
+    stats_dict["usher_pars_score"] = pars
+    stats_dict["usher_multifurc_distribution"] = multifurc_counts
+
+
+
+    outfile = sim_dir + "/tree_stats.json"
+    with open(outfile, "w") as f:
+        f.write(json.dumps(stats_dict, indent=4))
+
+    if best_possible != max_score:
+        raise RuntimeError("Non-unique leaf sequences in modified tree")
 
 
 @cli.command()
@@ -224,49 +381,89 @@ def load_fasta(fastapath):
                 fasta_records[-1][-1] += line.strip()
     return dict(fasta_records)
 
-@cli.command()
-@click.option("-c", "--clade-path", help="Path to clade directory.")
-@click.option("-n", "--num-trials", default=25, help="Number of trials to return.")
-def find_diversity(clade_path, num_trials):
-    trial_list = []
-    for trial in range(1, 101):
-        log_path = clade_path + f"/{trial}/results/historydag/opt_info/optimization_log_complete/logfile.csv"
-        try:
-            with open(log_path, "r") as f:
-                num_trees = f.readlines()[-1].split("\t")[-3]
-                trial_list.append((trial, int(num_trees)))
-        except:
-            print(f"\tSkipping {log_path}")
-            continue
+# @cli.command()
+# @click.option("-c", "--clade-path", help="Path to clade directory.")
+# @click.option("-n", "--num-trials", default=25, help="Number of trials to return.")
+# def find_diversity(clade_path, num_trials):
+#     trial_list = []
+#     for trial in range(1, 101):
+#         log_path = clade_path + f"/{trial}/results/historydag/opt_info/optimization_log_complete/logfile.csv"
+#         try:
+#             with open(log_path, "r") as f:
+#                 num_trees = f.readlines()[-1].split("\t")[-3]
+#                 trial_list.append((trial, int(num_trees)))
+#         except:
+#             print(f"\tSkipping {log_path}")
+#             continue
     
-    trial_list.sort(key=lambda el: el[1], reverse=True)
-    trial_list = trial_list[:num_trials]
-    with open("pars_div_trials.txt", "w") as f:
-        for trial, num_trees in trial_list:
-            f.write(f"{trial}\n")
-            print(trial, "\t", num_trees)
+#     trial_list.sort(key=lambda el: el[1], reverse=True)
+#     trial_list = trial_list[:num_trials]
+#     with open("pars_div_trials.txt", "w") as f:
+#         for trial, num_trees in trial_list:
+#             f.write(f"{trial}\n")
+#             print(trial, "\t", num_trees)
             
 
 @cli.command()
 @click.option("-c", "--clade-path", help="Path to clade directory.")
 @click.option("-n", "--num-trials", default=25, help="Number of trials to return.")
-def find_diversity(clade_path, num_trials):
+def get_trial_info(clade_path, num_trials):
     trial_list = []
-    for trial in range(1, 101):
-        log_path = clade_path + f"/{trial}/results/historydag/opt_info/optimization_log_complete/logfile.csv"
+    for trial in range(1, 26):
+        log_path = clade_path + f"/{trial}/results/historydag/opt_info/optimization_log_complete/logfile.csv"   # NOTE: This is somewhat unreliable measure of parsimony diversity
+        sim_info_path = clade_path + f"/{trial}/simulation/tree_stats.json"
+        results_path = clade_path + f"/{trial}/results/historydag/results.pkl"
+        support_log_path = clade_path + f"/{trial}/results/inference__historydag.log"
+        
         try:
+            with open(results_path, "rb") as f:
+                results = pickle.load(f)
+                results_in_hdag = [res for res in results if res[1] > 0]
+                num_nodes = len(results_in_hdag)
+
+            with open(sim_info_path, "r") as f:
+                tree_stats = json.load(f)
+                toi_score = int(tree_stats['max_score_top'])
+
             with open(log_path, "r") as f:
-                num_trees = f.readlines()[-1].split("\t")[-3]
-                trial_list.append((trial, num_trees))
-        except:
-            print(f"\tSkipping {log_path}")
+                last_line = f.readlines()[-1]
+                num_trees_uncollapsed = int(last_line.split("\t")[-3])
+                max_dag_pars = int(last_line.split("\t")[-4])
+
+            with open(support_log_path, "r") as f:
+                line = f.read().split("=>")[-1].strip()
+                assert "DAG contains " in line
+                num_trees = int(line.split(" ")[2])
+                counter_text = line.split("\n")[3][9:-2]
+                kv_text_list = counter_text.split(", ")
+                dists = {}
+                for string in kv_text_list:
+                    num_list = string.split(": ")
+                    dist = int(num_list[0])
+                    count = int(num_list[1])
+                    dists[dist] = count
+                closest_dist = min(list(dists.keys()))
+                max_dist = max(list(dists.keys()))
+
+            
+            # List of trial number, number of trees in uncollapsed DAG, toi and max pars scores, number of nodes in final DAG
+            if closest_dist >= 0:
+                trial_list.append((trial, num_trees_uncollapsed, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist))
+        except Exception as e:
+            print(e)
             continue
-    
-    trial_list.sort(key=lambda el: el[1])
-    trial_list = trial_list[-num_trials:]
-    with open("pars_div_trials.txt", "w") as f:
-        for trial, _ in trial_list:
+
+    trial_list.sort(key=lambda el: el[-3], reverse=True)
+
+    if num_trials < len(trial_list):
+        trial_list = trial_list[:num_trials]
+
+    with open(f"{clade_path}/pars_div_trials.txt", "w") as f:
+        print('trial, num_trees_uncollapsed, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist')
+        for trial, num_trees_uncollapsed, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist in trial_list:
             f.write(f"{trial}\n")
+            print(trial, "\t", num_trees_uncollapsed, "\t", num_trees, "\t", toi_score, "\t", max_dag_pars, "\t", num_nodes, "\t", closest_dist, "\t", max_dist)
+
     
 
 

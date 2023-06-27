@@ -16,18 +16,37 @@ mkdir -p $prefix
 
 deduplicate $infasta --root $rootname --idmapfile $prefix/idmap.txt > $prefix/deduplicated.phylip
 realpath $prefix/deduplicated.phylip > $prefix/dnapars.cfg
+
+# echo "J
+# 1
+# 10
+# O
+# 1
+# 4
+# 5
+# .
+# V
+# 100
+# Y
+# " >> $prefix/dnapars.cfg
+# old_dir=$(pwd)
+# cd $prefix
+# dnapars < dnapars.cfg > dnapars.log
+# cd $old_dir
+# grep "requires a total of" $prefix/outfile > $outdir/dnapars_output.txt
+
 echo "J
 1
-10
+1
 O
 1
 4
 5
 .
-V
-100
 Y
 " >> $prefix/dnapars.cfg
+
+# TODO: Extract the number of MP trees
 old_dir=$(pwd)
 cd $prefix
 dnapars < dnapars.cfg > dnapars.log
