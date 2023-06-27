@@ -32,22 +32,22 @@ for clade in $(cat clades.txt); do
 
     # TODO: Make a script for plotting clade results separate from trial results
     
-    # for trial in $t; do
-    #     echo "$clade: $trial"
-    #     outdir=$cladedir/$trial/figures/$method
-    #     mkdir -p $outdir
+    for trial in $t; do
+        echo "$clade: $trial"
+        outdir=$cladedir/$trial/figures/$method
+        mkdir -p $outdir
 
-    #     results=$cladedir/$trial/results/$method/results.pkl
-    #     python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
+        results=$cladedir/$trial/results/$method/results.pkl
+        python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
         
-    #     # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
-    #     # python support_pipeline/plotting.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
-    #     # python support_pipeline/plotting.py bin_pars_weights -i $results -o $outdir -c $clade -b 0.05 -m $method
+        # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
+        # python support_pipeline/plotting.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
+        # python support_pipeline/plotting.py bin_pars_weights -i $results -o $outdir -c $clade -b 0.05 -m $method
 
-    #     # dag_path=$cladedir/$trial/results/$method/final_opt_dag.pb
-    #     # python support_pipeline/plotting.py cumul_pars_weight -i $dag_path -o $outdir -p -0.1
+        # dag_path=$cladedir/$trial/results/$method/final_opt_dag.pb
+        # python support_pipeline/plotting.py cumul_pars_weight -i $dag_path -o $outdir -p -0.1
 
-    # done
+    done
 
     outdir=$cladedir/figures/$method
     mkdir -p $outdir

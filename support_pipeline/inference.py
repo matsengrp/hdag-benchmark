@@ -401,41 +401,15 @@ def get_mrbayes_trees(trees_file):
                 # put original ambiguous sequences back on leaves
                 yield tree
 
-# NOTE: Posterior is extremely flat so this is not a good way to get the tree probabilities
-# def get_trprobs_trees(trprobs_file):
-#     with open(trprobs_file, 'r') as fh:
-#         for line in fh:
-#             if 'translate' in line:
-#                 break
-#         translate_dict = {}
-#         for line in fh:
-#             idx, idx_name = line.strip().split(' ')
-#             translate_dict[idx] = idx_name[:-1]
-#             if idx_name[-1] == ';':
-#                 break
-
-#     with open(trprobs_file, 'r') as fh:
-#         for line in fh:
-#             if 'tree' in line.strip()[0:5]:
-#                 treeprob = float(re.search(r"(p = )([\d\.]+)", line).groups()[-1])
-#                 cumulprob = float(re.search(r"(P = )([\d\.]+)", line).groups()[-1])
-#                 nwk = line.strip().split(' ')[-1]
-#                 tree = build_tree(nwk, translate_dict)
-#                 for node in tree.iter_leaves():
-#                     node.name = translate_dict[node.name]
-#                 # put original ambiguous sequences back on leaves
-#                 print('.')
-#                 tree.prob = treeprob
-#                 tree.cumulprob = cumulprob
-#                 yield tree
-
 # TODO: Determine burnin and sample_freq from the input file
-def mrbayes_output(node_set, tree_file, burnin=7e7, sample_freq=2000):
+def mrbayes_output(node_set, tree_file, burnin=1e7, sample_freq=1000):
     """Same as hdag output, but for MrBayes"""
     node2support = {}
-    for tree_count, tree in enumerate(get_mrbayes_trees(tree_file)):
-        if tree_count * sample_freq < burnin:
+    tree_count = 0
+    for i, tree in enumerate(get_mrbayes_trees(tree_file)):
+        if i * sample_freq < burnin:
             continue
+        tree_count += 1
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])
         node2cu = {}
         curr_internal_name = 0

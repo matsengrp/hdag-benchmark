@@ -14,7 +14,13 @@ def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200
     for i, (_, est_sup, in_tree) in enumerate(results):
         if i % (len(results)//10) == 0:
             print("\t", i)
+
         x.append(est_sup)
+
+        # TODO: Make this an option and relabel histogram plot
+        # x_window = [float(el[1]) for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
+        # x.append(sum(x_window) / len(x_window))
+
         window = [int(el[2]) for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
         y.append(sum(window) / len(window))
         
@@ -28,8 +34,15 @@ def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200
         elif sup_range:
             support_window = [el[1] for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
             # First and fourth quartiles
-            min_sup.append(support_window[int(len(support_window)/4)])
-            max_sup.append(support_window[-int(len(support_window)/4)])
+            if i - len(support_window)/2 <= 0:
+                min_sup.append(support_window[0])
+            else:
+                min_sup.append(support_window[int(len(support_window)/4)])
+
+            if i + len(support_window)/2 >= window_size:
+                max_sup.append(support_window[-1])
+            else:
+                max_sup.append(support_window[-int(len(support_window)/4)])
 
     if std_dev:
         pos_devs = [y_val + dev for y_val, dev in zip(y, devs)]
