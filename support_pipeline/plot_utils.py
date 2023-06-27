@@ -2,6 +2,11 @@ import random
 import pickle
 from collections import Counter
 from math import isclose
+import numpy as np
+
+
+import matplotlib.pyplot as plt
+from scipy.stats import linregress, t
 
 def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
     """Given list of results tuples returns xy coords of sliding window plot."""
@@ -171,6 +176,58 @@ def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200
 #     #     return x, y, min_sup, max_sup
 #     # else:
 #     #     return x, y
+
+
+def plot_scatter_with_line(df, x_col, y_col, save_path):
+    # Extract the data from the dataframe
+    x = df[x_col]
+    y = df[y_col]
+
+    idxs = np.argsort(x)
+    x = x[idxs]
+    y = y[idxs]
+
+    # Perform Pearson correlation test
+    correlation = np.corrcoef(x, y)[0, 1]
+    slope, intercept, r, p_value, se = linregress(x, y)
+
+    # Calculate the line of best fit
+    line_of_best_fit = slope * x + intercept
+
+    # Calculate confidence intervals
+    y_err = y - line_of_best_fit
+    mean_x = np.mean(x)
+    n = len(x)
+    dof = n - 2  # degrees of freedom
+    alpha = 0.05  # Significance level (1 - confidence level)
+    t_critical = t.ppf(1 - alpha / 2, dof)  # Calculate the critical value
+    confidence_interval = t_critical * np.sqrt((np.sum(y_err ** 2) / dof) * (1.0 / n + (x - mean_x) ** 2 / np.sum((x - mean_x) ** 2)))
+
+    # Plot the scatter plot and line of best fit
+    plt.clf()
+    plt.scatter(x, y, label='Data Points', alpha=0.1)
+    plt.plot(x, line_of_best_fit, color='red', label='Line of Best Fit')
+
+    # Plot confidence intervals
+    plt.fill_between(x, line_of_best_fit - confidence_interval, line_of_best_fit + confidence_interval, color='orange', alpha=0.4, label='Confidence Intervals')
+
+    # Set plot labels and title
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title('Scatter Plot with Line of Best Fit')
+
+    # Add correlation coefficient, p-value, and critical value to the plot
+    text = f'Correlation: {correlation:.2f}\np-value: {p_value:.4f}\nCritical Value: {t_critical:.4f}'
+    plt.text(0.95, 0.05, text, transform=plt.gca().transAxes, ha='right', va='bottom', bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round'))
+
+    # Add legend
+    plt.legend()
+
+    # Save the plot
+    plt.savefig(save_path)
+
+    # Show the plot (optional)
+    plt.show()
 
     
 def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[], remove_zero_sup_nodes=True):
