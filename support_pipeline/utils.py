@@ -25,8 +25,13 @@ from historydag.utils import count_labeled_binary_topologies
 def get_true_nodes(tree_path):
     """ Given a newick file path, returns the set of all clades (as frozen sets of taxon ids)"""
 
+    try:
+        tree = ete.Tree(tree_path)
+    except:
+        print("\n --- Warning: Returning empty node set --- \n")
+        return set()
+
     curr_internal_name = 0
-    tree = ete.Tree(tree_path)
     etenode2cu = {}
     for node in tree.traverse("postorder"):
         if node.is_leaf():
@@ -49,7 +54,7 @@ def make_results_list(node2support, node_set, seq2taxId=None, log_prob=True):
     of triples, ordered by estimated support. `seq2taxId` and `log_prob` only need to be set
     if we are making a results list from the historydag inference"""
 
-    print("DAG supports:", len(node2support))
+    print("Method supports", len(node2support), "nodes")
 
     if seq2taxId is not None:
         support = {}
@@ -72,8 +77,9 @@ def make_results_list(node2support, node_set, seq2taxId=None, log_prob=True):
     for id_node, est_sup in node2support.items():
         if len(id_node) == 0:  # UA node
             continue
-
-        node2stats[id_node] = (est_sup, id_node in node_set)
+        
+        # Clamp supports so that they are no larger than 1.0
+        node2stats[id_node] = (min(est_sup, 1.0), id_node in node_set)
     
     # Get the support for all nodes in true tree
     for id_node in node_set:
@@ -150,3 +156,26 @@ def get_history(ete_tree_path, fasta_path, dag):
             reference=next(dag.postorder()).label.compact_genome.reference)
 
     return history
+
+
+def get_mrbayes_trees(trees_file):
+    with open(trees_file, 'r') as fh:
+        for line in fh:
+            if 'translate' in line:
+                break
+        translate_dict = {}
+        for line in fh:
+            idx, idx_name = line.strip().split(' ')
+            translate_dict[idx] = idx_name[:-1]
+            if idx_name[-1] == ';':
+                break
+
+    with open(trees_file, 'r') as fh:
+        for line in fh:
+            if 'tree' in line.strip()[0:5]:
+                nwk = line.strip().split(' ')[-1]
+                tree = build_tree(nwk, translate_dict)
+                for node in tree.iter_leaves():
+                    node.name = translate_dict[node.name]
+                # put original ambiguous sequences back on leaves
+                yield tree

@@ -57,8 +57,8 @@ python ../support_pipeline/inference.py save_supports -m "hdag" -t $ctree -i $da
 echo ""
 echo ""
 
-# python support_pipeline/inference.py save_supports \
-# -m "hdag-inf" \
-# -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/25/simulation/collapsed_simulated_tree.nwk \
-# -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/25/results/historydag/final_opt_dag.pb \
-# -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/25/results/historydag/results.pkl
+# python ../support_pipeline/inference.py save_supports \
+# -m "hdag" \
+# -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/${clade}_/reconstructed_seqs \
+# -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/${clade}_/results/historydag/final_opt_dag.pb \
+# -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/${clade}_/results/historydag/results.pkl

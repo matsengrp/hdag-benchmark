@@ -33,7 +33,8 @@ def cli():
 @click.option('--tree_path', '-t', help='the newick file for the true tree.')
 @click.option('--input_path', '-i', help='the file containing inference results.')
 @click.option('--output_path', '-o', help='the file to save output to.')
-def save_supports(method, tree_path, input_path, output_path):
+@click.option('--use_results', '-u', is_flag=True, help='edit the results file already stored at output path.')
+def save_supports(method, tree_path, input_path, output_path, use_results):
     """
     A method for computing, formatting, and saving node supports for various methods of inference 
     Input:  method of inference (e.g., hdag, beast, dag-inf, hdag-adj, etc.),
@@ -43,11 +44,11 @@ def save_supports(method, tree_path, input_path, output_path):
             format (clade, estimated_support, in_tree)
 
     E.g.
-    python support_pipeline_scripts/cli.py save_supports \
-    -m hdag-inf \
-    -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/simulation/collapsed_simulated_tree.nwk \
-    -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/final_opt_dag.pb \
-    -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/results_adj.pkl
+        python support_pipeline_scripts/cli.py save_supports \
+        -m hdag-inf \
+        -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/simulation/collapsed_simulated_tree.nwk \
+        -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/final_opt_dag.pb \
+        -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/results_adj.pkl
         """
 
     # Map of taxon id (e.g., s1, s4, etc) to full sequence
@@ -57,30 +58,39 @@ def save_supports(method, tree_path, input_path, output_path):
     # Compute the set of nodes that are in the true tree
     node_set = get_true_nodes(tree_path)
 
-    # Computes list of node supports
-    if method == "hdag":
-        p = "inf"
-        adjust = False
-        support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust, true_tree_path=tree_path)
-    elif method[0:5] == "hdag-":
-        if method[5:] == "inf":
-            p = "inf"
-            adjust = False
-        elif method[5:] == "adj":
-            p = "inf"
-            adjust = True
-        else:
-            p = float(method[5:])
-            adjust = False
-        support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)
-    elif method == "mrbayes":
-        support_list = mrbayes_output(node_set, input_path)
-    elif method == "beast":
-        raise Exception("BEAST inference is currently not supported.")
-    elif method == "random":
-        support_list = random_output(node_set, input_path)
+    # TODO: What is the default behavior of flag
+    if use_results:
+        print("=> Using previous support results")
+        with open(output_path, "rb") as f:
+            results = pickle.load(f)
+        support = {result[0]: result[1] for result in results}
+        support_list = make_results_list(support, node_set)
     else:
-        raise Exception(f"Invalid method: {method}")
+        print("=> Computing new list of node supports")
+        # Computes list of node supports
+        if method == "hdag":
+            p = "inf"
+            adjust = False
+            support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)#, true_tree_path=tree_path)
+        elif method[0:5] == "hdag-":
+            if method[5:] == "inf":
+                p = "inf"
+                adjust = False
+            elif method[5:] == "adj":
+                p = "inf"
+                adjust = True
+            else:
+                p = float(method[5:])
+                adjust = False
+            support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)
+        elif method == "mrbayes":
+            support_list = mrbayes_output(node_set, input_path)
+        elif method == "beast":
+            raise Exception("BEAST inference is currently not supported.")
+        elif method == "random":
+            support_list = random_output(node_set, input_path)
+        else:
+            raise Exception(f"Invalid method: {method}")
 
     # NOTE: Some
     # support_list = [result for result in support_list if result[1] > 0]
@@ -116,7 +126,7 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
         adjust: Whether to use adjusted node support
     """
 
-    print(f"=> Parsiomny score weight: k={pars_weight}")
+    print(f"=> Parsimony score weight: k={pars_weight}")
 
     start = time.time()
     if isinstance(inp, str):
@@ -402,12 +412,17 @@ def get_mrbayes_trees(trees_file):
                 yield tree
 
 # TODO: Determine burnin and sample_freq from the input file
-def mrbayes_output(node_set, tree_file, burnin=2e7, sample_freq=1000):
+def mrbayes_output(node_set, tree_file, burnin=0.7, sample_freq=1000):
     """Same as hdag output, but for MrBayes"""
+    for i, tree in enumerate(get_mrbayes_trees(tree_file)):
+        continue
+    num_trees = i
+    num_burned = num_trees * burnin
+
     node2support = {}
     tree_count = 0
     for i, tree in enumerate(get_mrbayes_trees(tree_file)):
-        if i * sample_freq < burnin:
+        if i * sample_freq < num_burned:
             continue
         tree_count += 1
         rerooted = reroot(tree.search_nodes(name="ancestral")[0])

@@ -54,11 +54,12 @@ for seed in $(seq 100); do
         ctreevcf=${ctreefasta_with_refseq}.vcf
         faToVcf $ctreefasta_with_refseq $ctreevcf
 
-        # TODO: Add component that checks MP tree on this data
-        if hdb get-tree-stats -s $simdir; then
-            echo "seed $s"
-            break
-        fi
+        # TODO: This will let the simulation run until an MP tree has been found
+        # if hdb get-tree-stats -s $simdir; then
+        #     echo "seed $s"
+        #     break
+        # fi
+        break
     fi
 done
 

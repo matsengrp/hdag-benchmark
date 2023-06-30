@@ -8,6 +8,7 @@ from scipy.stats import linregress, t
 import pandas as pd
 import seaborn as sns
 sns.set_theme()
+sns.set_style("white")
 
 import random
 from math import exp
@@ -17,6 +18,13 @@ from collections import Counter
 from historydag import parsimony_utils
 import historydag as hdag
 from plot_utils import sliding_window_plot, get_results_full, bin_hist_plot, plot_scatter_with_line
+
+colors = [
+    '#66c2a5',
+    '#fc8d62',
+    '#8da0cb',
+    '#e78ac3'
+]
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -45,18 +53,21 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
         print(f"\t...Skipping {input}")
         return
 
-    # Remove leaf nodes
-    res_no_leaves = []
+    cleaned_results = []
     for el in results:
-        if len(el[0]) > 1:
-            res_no_leaves.append(el)
-    results = res_no_leaves
+        if len(el[0]) > 1: # Remove leaf nodes
+            if el[1] > 0.01: # Remove low support nodes for efficiency
+                cleaned_results.append(el)
+    results = cleaned_results
+
+    # print("DEBUG: Here are the supports your workign with")
+    # print([result[1] for result in results])
 
 
-    if method != "historydag":
-        window_size = 100
+    if method == "mrbayes":
+        window_size = 50
     else:
-        window_size = int(len(results) * window_proportion)
+        window_size = min(int(len(results) * window_proportion), 50)
 
     out_path = out_dir + f"/support_quartiles_w={window_size}.png"
     x, y, min_sup, max_sup = sliding_window_plot(results, window_size=window_size, sup_range=True)
@@ -70,7 +81,6 @@ def coverage_trial_plot(input, out_dir, clade_name, method, window_proportion=0.
     ax1.plot(x, y, label="Support", color="red")
     ax1.scatter(min_sup, y, color="orange", alpha=0.1)
     ax1.scatter(max_sup, y, color="orange", alpha=0.1)
-    # ax1.fill_betweenx(y, min_sup, max_sup, alpha=0.2, color="orange", label="Support Range")
     ax1.plot([0, 1], [0, 1], color="blue", label="Perfect", linestyle="dashed")
     ax1.legend()
     
@@ -259,60 +269,62 @@ def compare_clade_results(clade_dir, out_path, method1, method2, results_name, t
     Uses only the nodes in method1 #TODO: Might wanna change this
 
     E.g.,
-python support_pipeline/plotting.py compare_clade_results \
--c /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108 \
--o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/figures \
--t 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25
+        python support_pipeline/plotting.py compare_clade_results \
+        -c /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108 \
+        -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.108/figures \
+        -t 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25
     
     """
-    # num_sim = 25
-    # skip_list = []
-    # # print("Raw trial nums:", trial_nums)
-    # if trial_nums is not None:
-    #     trial_num_ints = [int(n) for n in trial_nums.split(",")]
-    #     skip_list = [i for i in range(1, num_sim+1) if i not in trial_num_ints]
+    num_sim = 25
+    skip_list = []
+    # print("Raw trial nums:", trial_nums)
+    if trial_nums is not None:
+        trial_num_ints = [int(n) for n in trial_nums.split(",")]
+        skip_list = [i for i in range(1, num_sim+1) if i not in trial_num_ints]
 
-    # result_dict = {}
-    # for trial in range(1, num_sim+1):
-    #     result_path1 = clade_dir + f"/{trial}/results/{method1}/{results_name}"
-    #     result_path2 = clade_dir + f"/{trial}/results/{method2}/{results_name}"
+    result_dict = {}
+    for trial in range(1, num_sim+1):
+        # TODO: Figure out how to not include trials in a more natural way
+        result_path1 = clade_dir + f"/{trial}/results/{method1}/{results_name}"
+        result_path2 = clade_dir + f"/{trial}/results/{method2}/{results_name}"
 
-    #     # Skip any trials you don't want (e.g., inference on them hasn't finished for this run)
-    #     if trial in skip_list:
-    #         continue
+        # Skip any trials you don't want (e.g., inference on them hasn't finished for this run)
+        if trial in skip_list:
+            continue
+
         
-    #     try:
-    #         # Convert lists to map of clade -> (est_support, in_tree)
-    #         with open(result_path1, "rb") as f:
-    #             results1 = pickle.load(f)
-    #             results1 = {result[0]: (result[1], result[2]) for result in results1 if len(result[0]) > 1}
-    #         with open(result_path2, "rb") as f:
-    #             results2 = pickle.load(f)
-    #             results2 = {result[0]: (result[1], result[2]) for result in results2 if len(result[0]) > 1}
+        try:
+            # Convert lists to map of clade -> (est_support, in_tree)
+            with open(result_path1, "rb") as f:
+                results1 = pickle.load(f)
+                results1 = {result[0]: (result[1], result[2]) for result in results1 if len(result[0]) > 1}
+            with open(result_path2, "rb") as f:
+                results2 = pickle.load(f)
+                results2 = {result[0]: (result[1], result[2]) for result in results2 if len(result[0]) > 1}
 
-    #         # Create list (node, est1, est2, in_tree)
-    #         paired_results = []
-    #         for node1 in results1.keys():
-    #             in_tree = results1[node1][1]
-    #             est1 = results1[node1][0]
-    #             if node1 in results2:
-    #                 est2 = results2[node1][0]
-    #             else:
-    #                 est2 = 0
-    #             paired_results.append((node1, est1, est2, in_tree))
+            # Create list (node, est1, est2, in_tree)
+            paired_results = []
+            for node1 in results1.keys():
+                in_tree = results1[node1][1]
+                est1 = results1[node1][0]
+                if node1 in results2:
+                    est2 = results2[node1][0]
+                else:
+                    est2 = 0
+                paired_results.append((node1, est1, est2, in_tree))
                 
-    #         result_dict[trial] = paired_results
-    #         print(trial)
-    #     except:
-    #         print(f"\t--- Skipping {clade_dir} {trial} ---")
-    #         continue
+            result_dict[trial] = paired_results
+            print(trial)
+        except:
+            print(f"\t--- Skipping {clade_dir} {trial} ---")
+            continue
     
-    # if len(result_dict) == 0:
-    #     print("\n==>No results to print :(\n")
-    #     return
+    if len(result_dict) == 0:
+        print("\n==>No results to print :(\n")
+        return
     
-    # with open(f"{out_path}_comparsion_{method1}_{method2}.pkl", "wb") as f:
-    #     pickle.dump(result_dict, f)
+    with open(f"{out_path}_comparsion_{method1}_{method2}.pkl", "wb") as f:
+        pickle.dump(result_dict, f)
 
     with open(f"{out_path}_comparsion_{method1}_{method2}.pkl", "rb") as f:
         result_dict = pickle.load(f)
@@ -349,14 +361,198 @@ python support_pipeline/plotting.py compare_clade_results \
     # plt.legend()
     # plt.savefig(out_path + f"/clade_comparison_{method1}_{method2}.png")
 
+#################################################
+### Real Data Experiments
+#################################################
+
+@click.command("aggregate_results")
+@click.option('--base_dir', '-c', help='path to base directory where all clades reside.')
+@click.option('--out_dir', '-o', help='output path to store figures/tables in.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
+@click.option('--method', '-m', default='historydag,')
+@click.option('--support_removal_threshold', '-t', default=0.0)
+def aggregate_results(base_dir, out_dir, method, results_name, support_removal_threshold):
+    """
+    Generates CA plot by combining inferences across all clades for a given directory.
+
+    E.g.
+python support_pipeline/plotting.py aggregate_results \
+-c /fh/fast/matsen_e/whowards/hdag-benchmark/data \
+-o /fh/fast/matsen_e/whowards/hdag-benchmark/data/figures \
+-m historydag,mrbayes \
+-t 0.01
+
+    """
+    method_str = method
+    if ',' not in method:
+        methods = [method]
+    else:
+        methods = method.split(",")
+        if len(methods[-1]) == 0:
+            methods = methods[:-1]
+
+    method2color = {m: colors[i] for i, m in enumerate(methods)}
+
+    clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'B.1.258.3', 'BA.1.5', 'B.1.1.432', 'AY.32', 'P.1.7']
+    clade_names = [f"{c}_" for c in clade_names]
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
+    fig.set_size_inches(7, 9)
+    ax1.set_title(f"Coverage Analysis")
+    ax1.set_ylabel(f"Percentage Correct")
+    hist = []
+    
+    print(f"\tgenerating window plot at {out_dir}...")
+    for method in methods:
+        results_full = []
+        for clade in clade_names:
+            fp = f"{base_dir}/{clade}/results/{method}/{results_name}"
+            with open(fp, "rb") as f:
+                results = pickle.load(f)
+                cleaned_results = [result for result in results if len(result[0]) > 1 and result[1] > support_removal_threshold]
+                
+                # TODO: Adjust minimum cleaned results requirements...
+                if len(cleaned_results) > 90:
+                    print(clade, "\t with", len(cleaned_results))
+                    results_full.extend(cleaned_results)
+            
+        results_full.sort(key=lambda result: result[1])
+
+
+        if method == "mrbayes":
+            window_size = 100
+        else:
+            # window_size = int(len(results_full) * window_proportion)
+            window_size = 100
+
+        x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
+        ax1.plot(x, y, color=method2color[method], label=f"{method}")
+        ax1.fill_between(x, pos_devs, neg_devs, alpha=0.1, color=method2color[method])
+
+        hist.append(x)
+
+    ax2.hist(hist, color=list(method2color.values()))
+
+    ax1.plot([0, 1], [0, 1], color="blue", alpha=0.5, label="ideal", linestyle="dashed")
+    ax1.legend()
+    
+    ax2.set_yscale("log")
+    ax2.set_xlabel("Estimated Support")
+    fig.savefig(out_dir + f"/clade_comparison_{method_str}")
+    fig.clf()
+
+
+@click.command("compare_results")
+@click.option('--base_dir', '-c', help='path to clade directory.')
+@click.option('--out_path', '-o', help='output path to store figures/tables in.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
+@click.option('--method1', '-m1', default='historydag')
+@click.option('--method2', '-m2', default='mrbayes')
+@click.option('--support_removal_threshold', '-t', default=0.01)
+def compare_results(base_dir, out_path, method1, method2, results_name, support_removal_threshold):
+    """
+    Given two methods and the name of their results files, plots a scatter plot of the
+    estimated supports they give for each node in method1. Will aggregate the plot over all clades.
+    
+    Uses only the nodes in method1 #TODO: Might wanna change this
+
+    E.g.,
+python support_pipeline/plotting.py compare_results \
+-c /fh/fast/matsen_e/whowards/hdag-benchmark/data \
+-o /fh/fast/matsen_e/whowards/hdag-benchmark/data/figures
+    
+    """
+
+    clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'B.1.258.3', 'BA.1.5', 'B.1.1.432', 'AY.32', 'P.1.7']
+    clade_names = [f"{c}_" for c in clade_names]
+
+    # result_dict = {}
+    # for clade in clade_names:
+    #     result_path1 = base_dir + f"/{clade}/results/{method1}/{results_name}"
+    #     result_path2 = base_dir + f"/{clade}/results/{method2}/{results_name}"
+
+    #     try:
+    #         # Convert lists to map of clade -> (est_support, in_tree)
+    #         with open(result_path1, "rb") as f:
+    #             results1 = pickle.load(f)
+    #             results1 = {result[0]: (result[1], result[2]) for result in results1 if len(result[0]) > 1 and result[1] > support_removal_threshold}
+    #         with open(result_path2, "rb") as f:
+    #             results2 = pickle.load(f)
+    #             results2 = {result[0]: (result[1], result[2]) for result in results2 if len(result[0]) > 1 and result[1] > support_removal_threshold}
+
+    #         # Create list (node, est1, est2, in_tree)
+    #         paired_results = []
+    #         for node1 in results1.keys():
+    #             in_tree = results1[node1][1]
+    #             est1 = results1[node1][0]
+    #             if node1 in results2:
+    #                 est2 = results2[node1][0]
+    #             else:
+    #                 est2 = 0
+    #             paired_results.append((node1, est1, est2, in_tree))
+
+    #         if len(paired_results) > 90:
+    #             result_dict[clade] = paired_results
+    #             print(clade)
+    #         else:
+    #             raise(Warning(f"Clade only has nonzero support for {len(paired_results)} nodes."))
+    #     except:
+    #         print(f"\t--- Skipping {clade} ---")
+    #         continue
+    
+    # if len(result_dict) == 0:
+    #     print("\n==>No results to print :(\n")
+    #     return
+    
+    # with open(f"{out_path}/comparsion_{method1}_{method2}.pkl", "wb") as f:
+    #     pickle.dump(result_dict, f)
+
+    with open(f"{out_path}/comparsion_{method1}_{method2}.pkl", "rb") as f:
+        result_dict = pickle.load(f)
+
+    a=0.01
+    x_in = []
+    y_in = []
+    x_out = []
+    y_out = []
+    for clade, results in result_dict.items():
+        # if clade != 'P.1.7_':
+        #     continue
+        clade_results1 = [est1 for node, est1, est2, in_tree in results if in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a]
+        clade_results2 = [est2 for node, est1, est2, in_tree in results if in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a]
+        x_in.extend(clade_results1)
+        y_in.extend(clade_results2)
+        print(f"{clade}\t supports {len(clade_results1)} nodes")
+        x_out.extend([est1 for node, est1, est2, in_tree in results if not in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+        y_out.extend([est2 for node, est1, est2, in_tree in results if not in_tree and est1 > a and est2 > a and est1 < 1-a and est2 < 1-a])
+
+    x = x_in.copy()
+    x.extend(x_out)
+    y = y_in.copy()
+    y.extend(y_out)
+
+    data = np.array([x, y]).T
+    df = pd.DataFrame(data, columns = [method1, method2])
+    plot_scatter_with_line(df, method1, method2, out_path+f'/scatter_{method1}_{method2}.png')
+    
+    correlation = stats.pearsonr(y, x)
+    print("Correlation:", correlation)
+
+#################################################
+#################################################
 
 
 cli.add_command(coverage_trial_plot)
 cli.add_command(compare_trial_results)
+cli.add_command(compare_results)
 cli.add_command(clade_results)
 cli.add_command(compare_clade_results)
-# NOTE: Methods below here have not been thoroughly checked
+cli.add_command(aggregate_results)
 
+
+###################################################################################################
+### NOTE: Methods below here have not been thoroughly checked
+###################################################################################################
 
 @click.command("agg_pars_weights")
 @click.option('--input', '-i', help='file path to input list as a pickle.')

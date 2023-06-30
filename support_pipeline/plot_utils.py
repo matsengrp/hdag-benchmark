@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import linregress, t
 
-def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200):
+def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200, mean_x=False):
     """Given list of results tuples returns xy coords of sliding window plot."""
 
     results.sort(key= lambda result: result[1])
@@ -19,11 +19,11 @@ def sliding_window_plot(results, std_dev=False, sup_range=False, window_size=200
         if i % (len(results)//10) == 0:
             print("\t", i)
 
-        x.append(est_sup)
-
-        # TODO: Make this an option and relabel histogram plot
-        # x_window = [float(el[1]) for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
-        # x.append(sum(x_window) / len(x_window))
+        if mean_x:
+            x_window = [float(el[1]) for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
+            x.append(sum(x_window) / len(x_window))
+        else:
+            x.append(est_sup)
 
         window = [int(el[2]) for el in results[max(0, i-side_len):min(len(results), i+side_len)]]
         y.append(sum(window) / len(window))
@@ -229,10 +229,12 @@ def plot_scatter_with_line(df, x_col, y_col, save_path):
     plt.show()
 
     
-def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[], remove_zero_sup_nodes=True):
+def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[], support_removal_threshold=0.0):
     """
     Helper method for `clade_results` that aggregates all the results.pkl files for each trial
     into a single sorted list.
+
+    Removes any node with estimated support that is less than or equal to `support_removal_threshold`.
     """
 
     result_dict = {}
@@ -276,7 +278,65 @@ def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[], rem
         for result in results:
             node = result[0]
             if len(node) > 1:       # Removing leaves
-                if remove_zero_sup_nodes and result[1] == 0:
+                if result[1] <= support_removal_threshold:
+                    continue
+                results_full.append((result[0], result[1], result[2]))
+    
+    print(f"\tsorting {len(results_full)} results...")
+    random.shuffle(results_full)
+    results_full.sort(key=lambda el: el[1])
+    return results_full
+
+
+def get_results_general(base_dir, num_sim, method, results_name, skip_list=[], support_removal_threshold=0.0):
+    """
+    Helper method that aggregates all the results.pkl files for each trial into a single sorted list.
+
+    Removes any node with estimated support that is less than or equal to `support_removal_threshold`.
+    """
+
+    result_dict = {}
+    for trial in range(1, num_sim+1):
+        # Assumes that `path/to/clade/trial/results/results.pkl stores`` list of nodes
+        #   their supports and whether they're in the true tree or not
+        result_path = base_dir + f"/{trial}/results/{method}/{results_name}"
+
+        # Skip any trials you don't want (e.g., inference on them hasn't finished for this run)
+        if trial in skip_list:
+            continue
+        
+        try:
+            with open(result_path, "rb") as f:
+                results = pickle.load(f)
+
+                # NOTE: Removing leaves and UA node here
+                with_leaves = len(results)
+                leaf_in_tree = [int(result[2]) for result in results if len(result[0]) <= 1]
+                leaf_est_sup = [result[1] for result in results if len(result[0]) <= 1]
+                # print(leaf_in_tree[0:10])
+                # print(leaf_est_sup[0:10])
+                results = [result for result in results if len(result[0]) > 1]
+                without_leaves = len(results)
+                if with_leaves != without_leaves:
+                    print(f"==> Removed {with_leaves - without_leaves} leaves \
+                        avg in_tree = {sum(leaf_in_tree) / len(leaf_in_tree)} \
+                        avg est_sup = {sum(leaf_est_sup) / len(leaf_est_sup)}")
+                
+                result_dict[trial] = results
+        except:
+            print(f"\tSkipping {clade_dir} {trial}")
+            continue
+    
+    if len(result_dict) == 0:
+        print("\n==>No results to print :(\n")
+        return
+
+    results_full = []
+    for trial, results in result_dict.items():
+        for result in results:
+            node = result[0]
+            if len(node) > 1:       # Removing leaves
+                if result[1] <= support_removal_threshold:
                     continue
                 results_full.append((result[0], result[1], result[2]))
     

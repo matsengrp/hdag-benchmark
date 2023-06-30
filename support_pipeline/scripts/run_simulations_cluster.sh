@@ -9,9 +9,9 @@
 #   5. Store leaf sequences, ancestral sequence, and simulated tree
 
 # Paramaters that determine how many trees to simulate for each clade
-num_res=5
-num_sim=5
-num_cores=4
+num_res=1
+num_sim=1
+num_cores=1
 
 echo ""
 echo "=> Simulating trees..."
