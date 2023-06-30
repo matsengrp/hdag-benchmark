@@ -414,6 +414,7 @@ def get_trial_info(clade_path, num_trials):
         sim_info_path = clade_path + f"/{trial}/simulation/tree_stats.json"
         results_path = clade_path + f"/{trial}/results/historydag/results.pkl"
         support_log_path = clade_path + f"/{trial}/results/inference__historydag.log"
+        dnapars_path = clade_path + f"/{trial}/simulation/dnapars/outfile"
         
         try:
             with open(results_path, "rb") as f:
@@ -445,10 +446,13 @@ def get_trial_info(clade_path, num_trials):
                 closest_dist = min(list(dists.keys()))
                 max_dist = max(list(dists.keys()))
 
+            with open(dnapars_path, "r") as f:
+                line = f.readlines()[4].strip()
+                dnapars_trees = int(line.split(" ")[0])
             
             # List of trial number, number of trees in uncollapsed DAG, toi and max pars scores, number of nodes in final DAG
             if closest_dist >= 0:
-                trial_list.append((trial, num_trees_uncollapsed, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist))
+                trial_list.append((trial, num_trees_uncollapsed, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist, dnapars_trees))
         except Exception as e:
             print(e)
             continue
@@ -459,11 +463,102 @@ def get_trial_info(clade_path, num_trials):
         trial_list = trial_list[:num_trials]
 
     with open(f"{clade_path}/pars_div_trials.txt", "w") as f:
-        print('trial, num_trees_uncollapsed, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist')
-        for trial, num_trees_uncollapsed, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist in trial_list:
+        print('trial, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist, dnapars_trees')
+        for trial, num_trees_uncollapsed, num_trees, toi_score, max_dag_pars, num_nodes, closest_dist, max_dist, dnapars_trees in trial_list:
             f.write(f"{trial}\n")
-            print(trial, "\t", num_trees_uncollapsed, "\t", num_trees, "\t", toi_score, "\t", max_dag_pars, "\t", num_nodes, "\t", closest_dist, "\t", max_dist)
+            print(trial, "\t", \
+                    # num_trees_uncollapsed, "\t", \
+                    num_trees, "\t", \
+                    toi_score, "\t", \
+                    max_dag_pars, "\t", \
+                    num_nodes, "\t", \
+                    closest_dist, "\t", \
+                    max_dist, "\t", \
+                    dnapars_trees
+                )
 
+# @cli.command()
+# @click.option("-c", "--clade-path", help="Path to clade directory.")
+# def reconstruct_fasta(clade_path):
+#     """
+#     Reconstructs 'original' fasta file from tree and leaf sequences. Expects USHER protobuf to
+#     be stored at `clade_tree.pb.gz` and the reference sequence to be at `refseq.fasta` both in the
+#     `clade_path` directory.
+
+#     NEED to run `conda activate bte` first
+#     """
+
+#     import bte
+#     tree = bte.MATree(f'{clade_path}/clade_tree.pb.gz')
+
+#     # Build new reference sequence
+#     with open(f'{clade_path}/refseq.fasta', 'r') as f:
+#         f.readline()
+#         refseq_orig = f.readline()
+#     mutations = {}
+#     for node in tree.breadth_first_expansion():
+#         for mut in node.mutations:
+#             base = mut[0]
+#             idx = int(mut[1:-1])-1
+#             if idx not in mutations:
+#                 mutations[idx] = base
+#     refseq = edit_string(refseq_orig, mutations)
+
+#     # Create edit dictionary for each node and apply edits
+#     leaf2seq = {}
+#     leaves = tree.get_leaves()
+#     for leaf in leaves:
+#         mutations = []
+#         mutations.extend(leaf.mutations)
+#         node = leaf
+#         while node.level > 1:
+#             node = node.parent
+#             mutations.extend(node.mutations)
+#             if node.level == 1:
+#                 break
+        
+#         mutations.reverse()
+#         node_seq = refseq
+#         muts = {}
+#         for mut in mutations:
+#             idx = int(mut[1:-1])-1
+#             new_base = mut[-1]
+#             muts[idx] = new_base
+#         node_seq = edit_string(refseq, muts)
+        
+#         # Include each sequence once
+#         if node_seq not in leaf2seq.values():
+#             leaf2seq[leaf.id] = node_seq
+    
+#     out_path = f"{clade_path}/reconstructed_seqs.fasta"
+#     leaf2seq["ancestral"] = refseq_orig
+#     with open(out_path, 'w') as f:
+#         for leaf_id, seq in leaf2seq.items():
+#             f.write(f">{leaf_id}\n{seq.strip()}\n")
+
+# def edit_string(original, mutations):
+#     """
+#     Given the original string and a list of mutations, returns the new edited string.
+#     """
+#     new_str = ""
+#     prev_idx = 0
+#     idx_list = list(mutations.keys())
+#     idx_list.sort()
+#     for idx in idx_list:
+#         new_str += original[prev_idx:idx] + mutations[idx]
+#         prev_idx = idx+1
+#     if idx+1 < len(original):
+#         new_str += original[prev_idx:len(original)+1]
+    
+#     # Check to make sure your new sequence is correct
+#     assert len(new_str) == len(original)
+#     for i in range(len(original)):
+#         if i not in mutations.keys():
+#             assert original[i] == new_str[i]
+#         else:
+#             new_str[i] == mutations[i]
+
+#     return new_str
     
 
 
