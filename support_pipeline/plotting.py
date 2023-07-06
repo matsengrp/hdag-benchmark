@@ -370,7 +370,7 @@ def compare_clade_results(clade_dir, out_path, method1, method2, results_name, t
 @click.option('--out_dir', '-o', help='output path to store figures/tables in.')
 @click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
 @click.option('--method', '-m', default='historydag,')
-@click.option('--support_removal_threshold', '-t', default=0.0)
+@click.option('--support_removal_threshold', '-t', default=0.01)
 def aggregate_results(base_dir, out_dir, method, results_name, support_removal_threshold):
     """
     Generates CA plot by combining inferences across all clades for a given directory.
@@ -379,9 +379,9 @@ def aggregate_results(base_dir, out_dir, method, results_name, support_removal_t
 python support_pipeline/plotting.py aggregate_results \
 -c /fh/fast/matsen_e/whowards/hdag-benchmark/data \
 -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/figures \
--m historydag,mrbayes \
--t 0.01
-
+-r results_adj_first.pkl \
+-t 0.01 \
+-m historydag
     """
     method_str = method
     if ',' not in method:
@@ -393,7 +393,8 @@ python support_pipeline/plotting.py aggregate_results \
 
     method2color = {m: colors[i] for i, m in enumerate(methods)}
 
-    clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'B.1.258.3', 'BA.1.5', 'B.1.1.432', 'AY.32', 'P.1.7']
+    # clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'B.1.258.3', 'BA.1.5', 'B.1.1.432', 'AY.32', 'P.1.7']
+    clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'P.1.7', 'B.1.1.432', 'AY.32']
     clade_names = [f"{c}_" for c in clade_names]
 
     fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
@@ -449,6 +450,7 @@ python support_pipeline/plotting.py aggregate_results \
 @click.option('--method1', '-m1', default='historydag')
 @click.option('--method2', '-m2', default='mrbayes')
 @click.option('--support_removal_threshold', '-t', default=0.01)
+# @click.option('--rerun_results', , default=0.01)
 def compare_results(base_dir, out_path, method1, method2, results_name, support_removal_threshold):
     """
     Given two methods and the name of their results files, plots a scatter plot of the
@@ -459,58 +461,67 @@ def compare_results(base_dir, out_path, method1, method2, results_name, support_
     E.g.,
 python support_pipeline/plotting.py compare_results \
 -c /fh/fast/matsen_e/whowards/hdag-benchmark/data \
--o /fh/fast/matsen_e/whowards/hdag-benchmark/data/figures
-    
+-o /fh/fast/matsen_e/whowards/hdag-benchmark/data/figures \
+-r results_adj.pkl \
+-m1 historydag \
+-m2 mrbayes
     """
 
-    clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'B.1.258.3', 'BA.1.5', 'B.1.1.432', 'AY.32', 'P.1.7']
+    # clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'B.1.258.3', 'BA.1.5', 'B.1.1.432', 'AY.32', 'P.1.7']
+    clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'B.1.1.432', 'P.1.7', 'AY.32']   # NOTE: These are the clades that are large enough
     clade_names = [f"{c}_" for c in clade_names]
 
-    # result_dict = {}
-    # for clade in clade_names:
-    #     result_path1 = base_dir + f"/{clade}/results/{method1}/{results_name}"
-    #     result_path2 = base_dir + f"/{clade}/results/{method2}/{results_name}"
+    rerun_results=False
 
-    #     try:
-    #         # Convert lists to map of clade -> (est_support, in_tree)
-    #         with open(result_path1, "rb") as f:
-    #             results1 = pickle.load(f)
-    #             results1 = {result[0]: (result[1], result[2]) for result in results1 if len(result[0]) > 1 and result[1] > support_removal_threshold}
-    #         with open(result_path2, "rb") as f:
-    #             results2 = pickle.load(f)
-    #             results2 = {result[0]: (result[1], result[2]) for result in results2 if len(result[0]) > 1 and result[1] > support_removal_threshold}
+    if rerun_results:
+        result_dict = {}
+        for clade in clade_names:
+            result_path1 = base_dir + f"/{clade}/results/{method1}/{results_name}"
+            result_path2 = base_dir + f"/{clade}/results/{method2}/results.pkl"
 
-    #         # Create list (node, est1, est2, in_tree)
-    #         paired_results = []
-    #         for node1 in results1.keys():
-    #             in_tree = results1[node1][1]
-    #             est1 = results1[node1][0]
-    #             if node1 in results2:
-    #                 est2 = results2[node1][0]
-    #             else:
-    #                 est2 = 0
-    #             paired_results.append((node1, est1, est2, in_tree))
+            # print(result_path1)
+            # print(result_path2)
 
-    #         if len(paired_results) > 90:
-    #             result_dict[clade] = paired_results
-    #             print(clade)
-    #         else:
-    #             raise(Warning(f"Clade only has nonzero support for {len(paired_results)} nodes."))
-    #     except:
-    #         print(f"\t--- Skipping {clade} ---")
-    #         continue
-    
-    # if len(result_dict) == 0:
-    #     print("\n==>No results to print :(\n")
-    #     return
-    
-    # with open(f"{out_path}/comparsion_{method1}_{method2}.pkl", "wb") as f:
-    #     pickle.dump(result_dict, f)
+            try:
+                # Convert lists to map of clade -> (est_support, in_tree)
+                with open(result_path1, "rb") as f:
+                    results1 = pickle.load(f)
+                    results1 = {result[0]: (result[1], result[2]) for result in results1 if len(result[0]) > 1 and result[1] > support_removal_threshold}
+                with open(result_path2, "rb") as f:
+                    results2 = pickle.load(f)
+                    results2 = {result[0]: (result[1], result[2]) for result in results2 if len(result[0]) > 1 and result[1] > support_removal_threshold}
+
+                # Create list (node, est1, est2, in_tree)
+                paired_results = []
+                for node1 in results1.keys():
+                    in_tree = results1[node1][1]
+                    est1 = results1[node1][0]
+                    if node1 in results2:
+                        est2 = results2[node1][0]
+                    else:
+                        est2 = 0
+                    paired_results.append((node1, est1, est2, in_tree))
+
+                if len(paired_results) > 0:
+                    result_dict[clade] = paired_results
+                    print(clade)
+                else:
+                    raise(Warning(f"Clade only has nonzero support for {len(paired_results)} nodes."))
+            except:
+                print(f"\t--- Skipping {clade} ---")
+                continue
+        
+        if len(result_dict) == 0:
+            print("\n==>No results to print :(\n")
+            return
+        
+        with open(f"{out_path}/comparsion_{method1}_{method2}.pkl", "wb") as f:
+            pickle.dump(result_dict, f)
 
     with open(f"{out_path}/comparsion_{method1}_{method2}.pkl", "rb") as f:
         result_dict = pickle.load(f)
 
-    a=0.01
+    a=-1
     x_in = []
     y_in = []
     x_out = []

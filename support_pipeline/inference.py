@@ -85,6 +85,8 @@ def save_supports(method, tree_path, input_path, output_path, use_results):
             support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)
         elif method == "mrbayes":
             support_list = mrbayes_output(node_set, input_path)
+        elif method == "ufboot":
+            support_list = ufboot_output(node_set, input_path)
         elif method == "beast":
             raise Exception("BEAST inference is currently not supported.")
         elif method == "random":
@@ -128,6 +130,21 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
 
     print(f"=> Parsimony score weight: k={pars_weight}")
 
+    larch_trim = True
+    if larch_trim:
+        executable = "/home/whowards/larch/larch/build/larch-usher"
+        trimmed_path = ".".join(inp.split(".")[:-1]) + "_trimmed." + inp.split(".")[-1]
+        print("Trimming:", inp, "-->", trimmed_path)
+        args = [executable,
+                "-i", f"{inp}",
+                "-o", f"{trimmed_path}",
+                "-l", "/fh/fast/matsen_e/whowards/hdag-benchmark/data/temp_logs",
+                "--trim-max-parsimony",
+                ]
+        subprocess.run(args=args)
+        inp = trimmed_path
+
+
     start = time.time()
     if isinstance(inp, str):
         dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(inp)
@@ -137,8 +154,9 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
 
     start = time.time()
     dag.convert_to_collapsed()
-    dag.make_complete()
-    dag.convert_to_collapsed()
+    # TODO: Complete and collapse in larch too
+    # dag.make_complete()
+    # dag.convert_to_collapsed()
     print(f"=> Collapsing DAG took {(time.time() - start)/60} minutes")
 
     if isinstance(pars_weight, str):
@@ -284,6 +302,7 @@ def test_pars_weights(tree_path, pb_file, output_path):
         pickle.dump(weight_dict, f)
 
 
+# TODO: Add a CLI arg that allows larch to collapse the DAG
 @click.command("larch_usher")
 @click.option('--executable', '-e', default='/home/whowards/larch/larch/build/larch-usher', help='path to pre-made larch-usher executable')
 @click.option('--input', '-i', help='input tree or hdag. if tree, need refseqfile.')
@@ -358,7 +377,8 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
             "-o", f"{out_dir}/opt_dag_3.pb",
             "-l", f"{log_dir}_3",
             "--move-coeff-nodes", str(1),
-            "--move-coeff-pscore", str(3)
+            "--move-coeff-pscore", str(3),
+            "--trim-max-parsimony"
             ]
     subprocess.run(args=args)
 
@@ -379,7 +399,8 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
             "-l", f"{log_dir}_complete",
             "--move-coeff-nodes", str(1),
             "--move-coeff-pscore", str(3),
-            "--sample-any-tree"
+            "--sample-any-tree",
+            "--trim-max-parsimony"
             ]
     subprocess.run(args=args)
 
@@ -411,7 +432,6 @@ def get_mrbayes_trees(trees_file):
                 # put original ambiguous sequences back on leaves
                 yield tree
 
-# TODO: Determine burnin and sample_freq from the input file
 def mrbayes_output(node_set, tree_file, burnin=0.7, sample_freq=1000):
     """Same as hdag output, but for MrBayes"""
     for i, tree in enumerate(get_mrbayes_trees(tree_file)):
@@ -450,6 +470,59 @@ def mrbayes_output(node_set, tree_file, burnin=0.7, sample_freq=1000):
         node2support[node] = count / tree_count
 
     return make_results_list(node2support, node_set)
+
+
+###################################################################################################
+###   UFBoot   ####################################################################################
+###################################################################################################
+
+def parse_splits(file_path):
+    taxa_mapping = {}
+    with open(file_path, "r") as f:
+        in_taxa_mapping = False
+        for line in f:
+            if line.startswith(";"):
+                break
+
+            if in_taxa_mapping:
+                pair = line.strip().split(" ")
+                ufboot_id = pair[0][1:-1]
+                taxa_id = pair[1][1:-1]
+                taxa_mapping[ufboot_id] = taxa_id
+            
+            if line.startswith("TAXLABELS"):
+                in_taxa_mapping = True
+    
+    with open(file_path, "r") as f:
+        in_splits = False
+        for line in f:
+            if line.startswith(";"):
+                in_splits = False
+
+            if in_splits:
+                pair = line.strip().split("\t")
+                print(pair, "->", int(pair[0].strip()), pair[1].strip()[:-1].split(" "))
+                num_trees = int(pair[0].strip())
+                clade = [taxa_mapping[taxa] for taxa in pair[1].strip()[:-1].split(" ")]
+                yield clade, num_trees
+
+            if line.startswith("MATRIX"):
+                in_splits = True
+
+def ufboot_output(node_set, input_file):
+    """Same as hdag output, but for UFBoot"""
+
+    node2support = {}
+
+    tree_count = 100
+    for node, support in parse_splits(input_file):
+        if support == 0:
+            continue
+        cu = frozenset(node)
+        node2support[cu] = support / tree_count
+
+    return make_results_list(node2support, node_set)
+
 
 ###################################################################################################
 ###    Random   ###################################################################################

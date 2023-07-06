@@ -156,16 +156,17 @@ def get_tree_stats(sim_dir):
         for line in var_sites:
             f.write(f"{line}")
 
-    subprocess.run([
-        "dnapars_parsimony_score.sh",
-        var_sites_prefix + "_with_refseq.fasta",    # infasta
-        name,                                       # root_name
-        sim_dir                                     # out_dir
-    ])
-    with open(sim_dir + "/dnapars_output.txt", "r") as f:
-        line = f.readline()
-        temp = line.strip().split(" ")
-        best_possible = float(temp[-1])
+    # subprocess.run([
+    #     "dnapars_parsimony_score.sh",
+    #     var_sites_prefix + "_with_refseq.fasta",    # infasta
+    #     name,                                       # root_name
+    #     sim_dir                                     # out_dir
+    # ])
+    # with open(sim_dir + "/dnapars_output.txt", "r") as f:
+    #     line = f.readline()
+    #     temp = line.strip().split(" ")
+    #     best_possible = float(temp[-1])
+    best_possible = -1
     
     tree_path = sim_dir + "/collapsed_simulated_tree.nwk"
     tree = ete.Tree(tree_path) # Doesn't have internal names
@@ -269,8 +270,9 @@ def get_tree_stats(sim_dir):
     with open(outfile, "w") as f:
         f.write(json.dumps(stats_dict, indent=4))
 
-    if best_possible != max_score:
-        raise RuntimeError("Non-unique leaf sequences in modified tree")
+    # TODO: This is wrong, right?
+    # if best_possible != max_score:
+    #     raise RuntimeError("Non-unique leaf sequences in modified tree")
 
 
 @cli.command()

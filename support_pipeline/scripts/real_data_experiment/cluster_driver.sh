@@ -25,7 +25,7 @@ for clade in $(cat ../clades.txt); do
     cladedir=$datadir/$clade"_"
 
     # for trial in $(seq $num_trials); do
-    logfile=$clade"_/results/"$method-output.log
+    logfile=$clade"_/results/"$method-output_.log
     echo $logfile
 
     mkdir -p $clade"_/results"

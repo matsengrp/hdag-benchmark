@@ -54,7 +54,7 @@ def make_results_list(node2support, node_set, seq2taxId=None, log_prob=True):
     of triples, ordered by estimated support. `seq2taxId` and `log_prob` only need to be set
     if we are making a results list from the historydag inference"""
 
-    print("Method supports", len(node2support), "nodes")
+    print("Method supports", len(node2support), "nodes (with unique labels and clades)")
 
     if seq2taxId is not None:
         support = {}
@@ -86,7 +86,7 @@ def make_results_list(node2support, node_set, seq2taxId=None, log_prob=True):
         if id_node not in node2stats.keys():
             node2stats[id_node] = (0, True)
 
-    print("Considering", len(node2stats), "nodes")
+    print("Considering", len(node2stats), "(topological) nodes including those in true tree")
     stats_list =[(id_node, stats[0], stats[1]) for id_node, stats in node2stats.items()]
     random.shuffle(stats_list)
     stats_list.sort(key=lambda el: el[1])

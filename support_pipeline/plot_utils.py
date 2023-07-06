@@ -216,11 +216,11 @@ def plot_scatter_with_line(df, x_col, y_col, save_path):
     plt.title('Scatter Plot with Line of Best Fit')
 
     # Add correlation coefficient, p-value, and critical value to the plot
-    text = f'Correlation: {correlation:.2f}\np-value: {p_value:.4f}\nCritical Value: {t_critical:.4f}'
-    plt.text(0.95, 0.05, text, transform=plt.gca().transAxes, ha='right', va='bottom', bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round'))
+    # text = f'Correlation: {correlation:.2f}\np-value: {p_value:.4f}\nCritical Value: {t_critical:.4f}'
+    # plt.text(0.95, 0.05, text, transform=plt.gca().transAxes, ha='right', va='bottom', bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round'))
 
     # Add legend
-    plt.legend()
+    # plt.legend()
 
     # Save the plot
     plt.savefig(save_path)

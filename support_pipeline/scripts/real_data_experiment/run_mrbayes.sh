@@ -45,7 +45,7 @@ mkdir -p $trialdir
 cp $cladedir/reconstructed_seqs.fasta $trialdir/sampled_tree.nwk.fasta
 
 # NOTE: Only need to do this once
-python $currdir/support_pipeline/scripts/real_data_experiment/sample_from_mb.py $mrbayesdir/mrbayes-output.t $trialdir/sampled_tree.nwk
+# python $currdir/support_pipeline/scripts/real_data_experiment/sample_from_mb.py $mrbayesdir/mrbayes-output.t $trialdir/sampled_tree.nwk
 
 python $currdir/support_pipeline/inference.py save_supports \
 -m "mrbayes" \

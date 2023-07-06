@@ -14,11 +14,13 @@ Included scripts are variations on simulation, inference, and plotting scripts f
 1. Run `reconstruct_fasta.sh` to create the leaf sequences
 
 2. Run MrBayes inference with `cluster_driver.sh mrbayes`
-    - Sample topology from MrBayes tree file (sample line after burnin)
+    - This will sample a from MrBayes posterior and save it as `/trials/1/sampled_tree.nwk`
+    - the use of `trials` directory is intended to make it easier to add multiple samples from MB
 
 3. Run HistoryDAG inference with `cluster_driver.sh historydag`
-
-- At this point, `data/AY.108_/results/<method>/results.pkl` will contain results lists, where `<method>` is historydag or mrabyes
+    - At this point, `data/AY.108_/results/<method>/results.pkl` will contain results lists, where `<method>` is historydag or mrabyes
 
 4. Plot CA results with `python support_pipeline/plotting.py aggregate_results`
+
+5. You can compare different methods using `python support_pipeline/plotting.py compare_results`
     

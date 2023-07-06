@@ -29,7 +29,7 @@ for clade in $(cat clades.txt); do
     outdir=$cladedir/figures/$method
     mkdir -p $outdir
 
-    results=$cladedir/results/$method/results.pkl
+    results=$cladedir/results/$method/results_adj_first.pkl
     echo $results
     python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
 

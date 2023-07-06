@@ -49,11 +49,11 @@ optdag_final=final_opt_dag
 cp $dagdir/results.pkl $dagdir/results_copy.pkl
 
 python $currdir/support_pipeline/inference.py save_supports \
--m "hdag" \
+-m "hdag-adj" \
 -t $trialdir/sampled_tree.nwk \
 -i $dagdir/final_opt_dag.pb \
--o $dagdir/results.pkl \
---use_results
+-o $dagdir/results_adj_first.pkl
+# --use_results
 # NOTE: Remove the `--use_results` flag if you want to recompute the results list from scratch
 
 
