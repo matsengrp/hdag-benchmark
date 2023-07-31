@@ -1,0 +1,6 @@
+jc:--mutationRate JC69
+gtr:--mutationRates GTR 0.03835274 0.1384642 0.03681449 0.02181209 0.5658415 0.1987149 0.25 0.25 0.25 0.25
+jc_rv:--mutationRate JC69 --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0
+jc_rv_inv:--mutationRate JC69 --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --invariable 0.1
+jc_rv_inv_hmut:--mutationRate JC69 --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --invariable 0.1 --hyperMutProbs 0.01 --hyperMutRates 150.0
+unrest_hmut:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 150.0

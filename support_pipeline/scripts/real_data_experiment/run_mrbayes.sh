@@ -13,12 +13,14 @@ clade=$2
 trial=1
 
 echo $currdir
-datadir=$currdir/data
+
+# TODO: Change this to get out of old_data soon
+datadir=$currdir/data/real_data
 
 # cd into the data directory
 cd $datadir
 
-cladedir=$datadir/$clade"_"
+cladedir=$datadir/$clade
 resultsdir=$cladedir/"results"
 mrbayesdir=$resultsdir/mrbayes
 mkdir -p $mrbayesdir
@@ -47,8 +49,10 @@ cp $cladedir/reconstructed_seqs.fasta $trialdir/sampled_tree.nwk.fasta
 # NOTE: Only need to do this once
 # python $currdir/support_pipeline/scripts/real_data_experiment/sample_from_mb.py $mrbayesdir/mrbayes-output.t $trialdir/sampled_tree.nwk
 
-python $currdir/support_pipeline/inference.py save_supports \
--m "mrbayes" \
--t $trialdir/sampled_tree.nwk \
--i $mrbayesdir/mrbayes-output.t \
--o $mrbayesdir/results.pkl
+# python $currdir/support_pipeline/inference.py save_supports \
+# -m "mrbayes" \
+# -t $trialdir/sampled_tree.nwk \
+# -i $mrbayesdir/mrbayes-output.t \
+# -o $mrbayesdir/results.pkl
+
+python $currdir/support_pipeline/scripts/sandbox/mb_parsimony_distribution.py $clade

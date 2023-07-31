@@ -1,0 +1,11 @@
+execute {0[0]};
+
+begin mrbayes;
+    set nowarn=yes seed=42 swapseed=1337;
+    lset nst=1 rates=invgamma ngammacat=4;
+    prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:uniform(0, 0.0016723);
+    mcmcp nruns=1 nchains=4 ngen=50000000 samplefreq=1000 printfreq=1000 diagnfreq=1000 file={0[1]} append=no;
+    mcmc;
+    sump burninfrac=0.5;
+    sumt burninfrac=0.5;
+end;

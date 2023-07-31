@@ -12,39 +12,32 @@ curr_dir=$1
 rseed=$2
 simdir=$3
 rtree=$4
-hypermut_prob=$5
-hypermut_rate=$6
+sim_params=$5
 
 echo $1
 echo $2
 echo $3
 echo $4
 echo $5
-echo $6
 
 # NOTE: Should always be data directory
 cd $curr_dir
+
+simtree=$simdir/sars-cov-2_simulation_output.tree
+simfasta=$simdir/sars-cov-2_simulation_output.fasta
+
+ctree=$simdir/collapsed_simulated_tree.nwk
+ctreefasta=${ctree}.fasta
+ctreefasta_with_refseq=$simdir/ctree_with_refseq.fasta  # Stores leaf sequences
 
 # Simulate mutations on the tree until we get one without convergent evolution
 for seed in $(seq 100); do
     # Seed is also printed to sim.log
     let "s = $seed + ($rseed-1) * 100"
+    full_sim_params="--outpath $simdir/ --seed $s --createFasta --createInfo --createNewick --createPhylip --treeFile $rtree --scale 0.00003344 --reference refseq.fasta --eteFormat 1 "$sim_params
+    phastSim $full_sim_params
     
-    phastSim --outpath $simdir/ --seed $s --createFasta --createInfo \
-            --createNewick --createPhylip --treeFile $rtree \
-            --scale 0.00003344 \
-            --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 \
-            --reference refseq.fasta --eteFormat 1 \
-            --hyperMutProbs $hypermut_prob --hyperMutRates $hypermut_rate
-            # --mutationRate JC69
-    
-    simtree=$simdir/sars-cov-2_simulation_output.tree
-    simfasta=$simdir/sars-cov-2_simulation_output.fasta
-
-    ctree=$simdir/collapsed_simulated_tree.nwk
-    ctreefasta=${ctree}.fasta
-    ctreefasta_with_refseq=$simdir/ctree_with_refseq.fasta  # Stores leaf sequences
-    
+    # NOTE: This does not collapse true tree
     # produces ctreefasta_with_refseq which doesn't contain reference sequence
     # throws error message if tree exhibits convergent evolution
     if hdb collapse-tree $simtree $simfasta $ctree; then
@@ -60,9 +53,14 @@ for seed in $(seq 100); do
     fi
 done
 
-# TODO: Should we be looking at the resolved tree???
 hdb get-tree-stats -s $simdir
 
 # Uncollapse tree
-re_resolved_tree=$simdir/resolved_output.nwk
-hdb resolve-multifurcations -i $ctree -o $re_resolved_tree --resolve-seed 1 --branch-len-model num-muts
+# re_resolved_tree=$simdir/resolved_output.nwk
+# hdb resolve-multifurcations -i $ctree -o $re_resolved_tree --resolve-seed 1 --branch-len-model num-muts
+
+# bash support_pipeline/scripts/mb_simulation_experiment/simulate_trial.sh /fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models \
+# 1 \
+# P.1.7/jc/1/simulation \
+# P.1.7/resolved/1/rtree.nwk \
+# "--mutationRate JC69"

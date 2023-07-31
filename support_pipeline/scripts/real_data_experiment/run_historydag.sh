@@ -12,8 +12,8 @@ currdir=$1
 clade=$2
 trial=1
 
-datadir=$currdir/data
-cladedir=$datadir/$clade"_"
+datadir=$currdir/data/real_data
+cladedir=$datadir/$clade
 trialdir=$cladedir/trials/$trial
 resultsdir=$cladedir/"results"
 mkdir -p $resultsdir
@@ -42,17 +42,18 @@ optdag_final=final_opt_dag
 
 # echo "===> lusher optimizing..."
 # log_prefix=$dagdir/opt_info/optimization_log
-# python ../support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 1000 -o $dagdir -l $log_prefix -f $optdag_final
+# python $currdir/support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 1000 -o $dagdir -l $log_prefix -f $optdag_final
 
 ## ------------------------------------------------------------------ ##
 
-cp $dagdir/results.pkl $dagdir/results_copy.pkl
+
+# cp $dagdir/results.pkl $dagdir/results_copy.pkl
 
 python $currdir/support_pipeline/inference.py save_supports \
--m "hdag-adj" \
--t $trialdir/sampled_tree.nwk \
+-m "hdag" \
+-f $cladedir/reconstructed_seqs.fasta \
 -i $dagdir/final_opt_dag.pb \
--o $dagdir/results_adj_first.pkl
+-o $dagdir/results.pkl
 # --use_results
 # NOTE: Remove the `--use_results` flag if you want to recompute the results list from scratch
 

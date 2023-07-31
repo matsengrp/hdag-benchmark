@@ -9,7 +9,6 @@ num_res=3
 num_sim=1
 num_trials=$num_res*$num_res
 num_cores=2
-trial_file="pars_div_trials"
 method=$1
 
 let "num_trials = $num_sim * $num_res"
@@ -30,7 +29,7 @@ script_dir=$currdir"/support_pipeline/scripts/hypermutation_experiment"
 
 for clade in $(cat $script_dir/clades.txt); do
 
-    # if value of $var starts with #, ignore it
+    # if value of $clade starts with #, ignore it
     [[ $clade =~ ^#.* ]] && continue
 
     echo $clade
@@ -38,15 +37,17 @@ for clade in $(cat $script_dir/clades.txt); do
 
     for hmut in $(cat $script_dir/hypermutation.txt); do
 
+        [[ $hmut =~ ^#.* ]] && continue
+
         for trial in $(seq $num_trials); do
 
             resultsdir=$clade/$hmut/$trial/"results"
             mkdir -p $resultsdir
 
-            logfile=$resultsdir/inference_$method.log
+            logfile=$resultsdir/inference_${method}_rerun.log
 
             sbatch -t 6-0 -c $num_cores -J "$trial|$clade|$hmut" -o $logfile -e $logfile.err \
-            $currdir/support_pipeline/scripts/hypermutation_experiment/infer_trial_$method.sh $currdir $clade $trial $hmut
+            $currdir/support_pipeline/scripts/hypermutation_experiment/infer_trial_${method}.sh $currdir $clade $trial $hmut
         
         done
     

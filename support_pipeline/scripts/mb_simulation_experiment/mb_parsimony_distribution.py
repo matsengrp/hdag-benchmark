@@ -4,13 +4,10 @@ import re
 import sys
 import pickle
 
-experiment_type = "real_data/_old_data"
-clade = sys.argv[1]
-
-try:
-    trial = sys.argv[2]
-except:
-    trial = "-"
+experiment_type = "sim_models"
+sim_type = sys.argv[1]
+clade = sys.argv[2]
+trial = sys.argv[3]
 
 
 # Number of trees in the MrBayes run
@@ -18,11 +15,9 @@ num_trees = 5e4
 burnin = 0.9
 iter_per_sample = 1000
 
-dir_path = f"/fh/fast/matsen_e/whowards/hdag-benchmark/data/{experiment_type}/{clade}_"
-if trial[0] != "-":
-    dir_path += f"/{trial}"
+dir_path = f"/fh/fast/matsen_e/whowards/hdag-benchmark/data/{experiment_type}/{clade}/{sim_type}/{trial}"
 
-fasta_path = dir_path + "/reconstructed_seqs.fasta"
+fasta_path = dir_path + "/simulation/collapsed_simulated_tree.nwk.fasta"
 mb_path = dir_path + "/results/mrbayes/mrbayes-output.t"
 fasta = load_fasta(fasta_path)
 

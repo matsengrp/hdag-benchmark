@@ -13,25 +13,24 @@ export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 
 currdir=$PWD
-datadir=data
+datadir=data/real_data
 cd $datadir
-
-for clade in $(cat ../clades.txt); do
+script_dir=$currdir"/support_pipeline/scripts/real_data_experiment"
+for clade in $(cat $script_dir/clades.txt); do
 
     # if value of $var starts with #, ignore it
     [[ $clade =~ ^#.* ]] && continue
 
     echo $clade
-    cladedir=$datadir/$clade"_"
+    cladedir=$datadir/$clade
 
     # for trial in $(seq $num_trials); do
-    logfile=$clade"_/results/"$method-output_.log
+    logfile=$clade"/results/"$method-output-rerun.log
     echo $logfile
 
-    mkdir -p $clade"_/results"
+    mkdir -p $clade"/results"
     
     sbatch -t 7-0 -c $num_cores -J "$clade|$method|real-data-mb" -o $logfile -e $logfile.err \
     $currdir/support_pipeline/scripts/real_data_experiment/run_$method.sh $currdir $clade
-
 done
 

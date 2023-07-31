@@ -1,0 +1,56 @@
+
+Boilerplate Simulation Settings:
+
+    phastSim --outpath $simdir/ --seed $s --createFasta --createInfo \
+        --createNewick --createPhylip --treeFile $rtree \
+        --scale 0.00003344 \
+        --reference refseq.fasta --eteFormat 1 \
+
+--------------------
+Simple (no misspecification)
+--------------------
+    JC:
+        --mutationRate JC69
+    MrBayes:
+        lset nst=1;
+        prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:uniform(0, 0.0016723);
+
+    GTR:
+        --mutationRate GTR 0.03835274 0.1384642 0.03681449 0.02181209 0.5658415 0.1987149 0.25 0.25 0.25 0.25
+    MrBayes:
+        lset nst=6;
+        prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:uniform(0, 0.0016723);
+
+--------------------
+Added Complexity (no misspecification)
+--------------------
+    RV
+    JC:
+        --mutationRate JC69 --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0
+    MrBayes:
+        lset nst=1 rates=gamma ngammacat=4;
+        prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:uniform(0, 0.0016723);
+
+    RV + Inv
+    JC:
+        --mutationRate JC69 --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --invariable 0.1
+    MrBayes:
+        lset nst=1 rates=invgamma ngammacat=4;
+        prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:uniform(0, 0.0016723);
+
+    RV + Inv + HyperMut
+    JC:
+        --mutationRate JC69 --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --invariable 0.1 --hyperMutProbs 0.01 --hyperMutRates 150.0
+    MrBayes:
+        lset nst=1 rates=invgamma ngammacat=4;
+        prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:uniform(0, 0.0016723);
+
+--------------------
+Complex (w/ misspecification)
+--------------------
+    MAPLE w/ hmut (Uses UNREST):
+        --categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 150.0
+    MrBayes:
+        lset nst=6 rates=gamma ngammacat=4;
+        prset statefreqpr=fixed(equal) topologypr=uniform brlenspr=unconstrained:uniform(0, 0.0016723);
+

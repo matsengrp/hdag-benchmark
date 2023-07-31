@@ -1,0 +1,21 @@
+#_unrest_hmut_150:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#_unrest_hmut_170:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 0.01 --hyperMutRates 20.0 150.0
+#_unrest_hmut_200:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#_unrest_hmut_220:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 0.01 --hyperMutRates 20.0 200.0
+#_unrest_hmut_40:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.02 --hyperMutRates 20.0
+#_unrest_hmut_300:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.02 --hyperMutRates 150.0
+#_unrest_hmut_400:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.02 --hyperMutRates 200.0
+#unrest_hmut_0:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0
+#unrest_hmut_50_10:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 50.0
+#unrest_hmut_100_10:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#unrest_hmut_250_10:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 250.0
+#unrest_hmut_100_5:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.005 --hyperMutRates 100.0
+#unrest_hmut_150_5:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.005 --hyperMutRates 150.0
+#unrest_hmut_200_5:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.005 --hyperMutRates 200.0
+#unrest_hmut_250_5:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.005 --hyperMutRates 250.0
+gamma_rv_10:--alpha 0.1
+gamma_rv_20:--alpha 0.2
+#
+#_unrest_hmut_150_10:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#_unrest_hmut_200_10:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#

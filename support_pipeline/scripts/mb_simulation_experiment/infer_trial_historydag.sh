@@ -10,10 +10,10 @@ export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 currdir=$1
 clade=$2
 trial=$3
-hmut=$4
+sim_model=$4
 
-datadir=$currdir/data/hypermutation
-trialdir=$datadir/$clade/$hmut/$trial
+datadir=$currdir/data/sim_models
+trialdir=$datadir/$clade/$sim_model/$trial
 simdir=$trialdir/"simulation"
 resultsdir=$trialdir/"results"
 mkdir -p $resultsdir
@@ -36,15 +36,14 @@ mkdir -p $dagdir/opt_info
 optdag_final=final_opt_dag
 
 # TODO: Uncomment this when you want to search for new trees ---v
-# # $ctreevcf contains the ancestral sequence and all the other simulated sequences
-# echo "===> create tree with UShER..."
-# usher-sampled -v $ctreevcf -t $starttree -o $seedtree  --optimization_minutes=0 -d $dagdir/opt_info
+# $ctreevcf contains the ancestral sequence and all the other simulated sequences
+echo "===> create tree with UShER..."
+usher-sampled -v $ctreevcf -t $starttree -o $seedtree --optimization_minutes=0 -d $dagdir/opt_info
 
-# echo "===> lusher optimizing..."
-# log_prefix=$dagdir/opt_info/optimization_log
-# python $currdir/support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 1000 -o $dagdir -l $log_prefix -f $optdag_final
+echo "===> lusher optimizing..."
+log_prefix=$dagdir/opt_info/optimization_log
+python $currdir/support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 5000 -o $dagdir -l $log_prefix -f $optdag_final
 
-# NOTE: Using resolved tree for coverage plot
-rtree=$simdir/resolved_output.nwk
-python $currdir/support_pipeline/inference.py save_supports -m "hdag" -t $rtree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl -f $ctreefasta --use_results
+
+python $currdir/support_pipeline/inference.py save_supports -m "hdag" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl -f $ctreefasta # --use_results
 
