@@ -2,81 +2,138 @@
 
 ## Dependencies
 
+Clone this repository, and `cd` into it.
 Install dependencies via:
 
     conda env create -f environment.yml
     conda activate hdag-benchmark
-
-
-## Install
-
     pip install -e .
 
+We also make heavy use of the historyDAG repository.
+The branch that we're using currently is `whs-diffused-madag-sampler` (once this is merged into main, we'll probably switch to that).
+You can access it by cloning the repository and running `pip install -e .` once inside.
 
-## Additional Requirements
+## Directory Description
 
-TODO: Add requirements for installing MrBayes v3.2.7a from source (without Beagle or MPI)
+### Scripts
 
-We also make use of `beast2-xml`, a python package for loading fasta files into XML format.
-Unfortunately, this package is incompatible with `protobuf`.
-So, we create a new conda environment to switch to when loading the XML files as follows:
+The `support_pipeline` directory should have the following structure:
 
-    conda create -n beast-xml python=3.10
-    conda activate beast-xml
-    pip install beast2-xml
+    ├── data
+    ├── hdb
+    └── support_pipeline
+        ├── simulation.py
+        ├── inference.py
+        ├── plotting.py
+        ├── plot_utils.py
+        ├── utils.py
+        └── scripts
+            ├── diffused_sampling_experiment
+            ├── hypermutation_experiment
+            ├── mb_simulation_experiment
+            ├── suboptimal_structure_exploration
+            ├── real_data_experiment
+            ├── plot_results.sh
+            ├── python_replace.py
+            ├── run_inference_cluster.sh
+            ├── run_simulations_cluster.sh
+            ├── infer_trial_historydag.sh
+            ├── infer_trial_mrbayes.sh
+            ├── infer_trial_random.sh
+            ├── infer_trial_ufboot.sh
+            └── simulate_trial.sh
 
-We also make ues of some packages in the most recent version of history dag (specifically, the partial-sankoff branch).
-To use these, clone the history dag repository and run
-    
-    conda activate hdag-benchmark
-    pip install -e <path/to/hdag/repo>
-    
-Make sure you are not in the `beast2-xml` environment, as this could break it.
+The files `simulation.py`, `inference.py`, and `plotting.py` contain cli scripts for simulating data, inferring support/posteriors, and plotting results, respectively.
+These python cli scripts are bundled up into bash files that can be sent to the cluster by cluster drivers (bash scripts that have `cluster` in their name).
+For example, running
 
-## Support Experiments
+    bash support_pipeline/scripts/run_inference_cluster.sh historydag
 
-Currently, our scripts for running support experiments is located in `support_pipeline_scripts`
-(this might change soon and they'll go in `hbd/scripts`).
-These scripts assume that you are running them from the `hdag-benchmark` directory.
-Edit the `clades.txt` file to determine which PANGO clades will be simulated/analyzed.
-If a `#` is put in front of a clade name (no space), it will be ignored.
-The `*_cluster.sh` scripts assume access to a cluster with slurm workload manager.
+executes `infer_trial_historydag.sh` for each clade and trial you've specified, and sends these instances to the cluster.
 
-### Simulation
+The directories under scripts that end in experiment (or exploration) contain scripts that we used to investigate a particular phenomenon (e.g., the relationship between hypermutation and parsimony diversity) that isn't necessarily directly related to support inference.
+Often, these will have there own cluster drivers, and simulation/inference scripts that are minor variations of those in the `scripts` directory.
 
-You can run a batch of simulations with 
 
-    bash support_pipeline_scripts/run_simulations_cluster.sh
+### Data + Results
 
-This extracts tree topologies from teh big UShER MAT, and simulates sequences for each clade using PhastSim on those topologies.
-There are additional parameters near the top of the script (these will likely turn into command line parameters soon).
+Once you run a simulation script, it will populate the `data` directory.
 
-    num_res=x
-    num_sim=y
+Currently, we are simulating using hypermutation and gamma rate variation. You can simulate this data by running
 
-These control randomness in how the simulated tree is generated.
-`num_res` is the number of seeds to use for resolving multifurcations, and `num_sim` is the number of seeds to use for PhastSim.
-The script will create `x * y` total "trials", each representing a simulation based on the given clade.
-These simulations can be found at `data/<clade-name>/<trial-number>/simulation`.
-In this directory, 
-`ctree_with_refseq.fasta` contains the leaves of the simulated tree and the ancestral sequence and `collapsed_simulated_tree.nwk` contains the simulated tree.
+    bash support_pipeline/scripts/mb_simulation_experiemnt/run_simulations_cluster.sh
 
-### Inference
+Note that the cluster driver is within the `mb_simulation_experiment`, NOT the one directly under the scripts directory.
+Running this command will produce the following directory structure:
+
+    ├── data
+    |   └── sim_models
+    |       └── <clade-name>
+    |           └── gamma_10_hmut_50
+    |               ├── <trial-number>
+    |               |   ├── figures
+    |               |   ├── results
+    |               |   └── simulation
+    |               └── figures
+    |
+    ├── hdb
+    └── support_pipeline
+
+The simulated data for the given clade-trial will be stored in the `data/sim_models/<clade-name>/gamma_10_hmut_50/<trial-number>/simulation` directory, and figures/results for that trial will be stored in the figure/results directory, respectively.
+
+The `figures` directory outside the trial directory is used to store figures that are aggregated over all the trials for that clade (e.g., coverage analysis plot for all simulations that use the A.2.5 UShER-clade for their topology).
+
+## Experiments
+
+Most of the results/data for these experiemnts are not pushed to the repository.
+You can find them by going to my fast directory `fh/fast/whowards/hdag-benchmark` and appending the given file path stated below.
+You can read more about each experiment below or by clicking their links:
+
+- [`hypermutation_experiment`](https://github.com/matsengrp/hdag-benchmark/tree/main/support_pipeline/scripts/hypermutation_experiment):
+Used to observe how hypermutation impacts a method's coverage performance. Results + data stored in `data/hypermutation`.
+
+- [`real_data_experiment`](https://github.com/matsengrp/hdag-benchmark/tree/main/support_pipeline/scripts/real_data_experiment):
+Evaluates methods of support estimation by running MrBayes on real data, sampling a tree from the MrBayes posterior, and treating it as the true tree when producing coverage plot. Results + data stored in `data/real_data` and figures at `data/figures`.
+
+- [`mb_simulation_experiment`](https://github.com/matsengrp/hdag-benchmark/tree/main/support_pipeline/scripts/mb_simulation_experiment):
+Evaluates MrBayes support/parsimony posterior coverage at varying levels of model mismatch.
+Also, used these scripts investigate Parsimony Diversity.
+Results + data stored at `data/sim_models`.
+
+- [suboptimal_structure_exploration](https://github.com/matsengrp/hdag-benchmark/tree/main/support_pipeline/scripts/suboptimal_structure_exploration):
+Explores what sorts of unparsimonious structures are present in the true trees.
+Results stored at `data/sub_struct`.
+
+- [diffused_sampling_experiment](https://github.com/matsengrp/hdag-benchmark/tree/main/support_pipeline/scripts/diffused_sampling_experiment):
+Used to test and visualize the diffused sampler.
+Also, contains scripts for identifying when a mutation in the MP tree is likely to be a PCM. 
+Results stored in the `diff_historydag` directory of the results section of `sim_models` (e.g., `data/sim_models/A.2.5/gamma_10_hmut_50/figures/diff_historydag_mut_rates`).
+
+The first two are somewhat irrelevant now. So they can be safely ignored.
+The experiments in `mb_simulation_experiment` are not so important, but we currently use the simulation scripts to simulate data that has hypermutation and gamma rate variation.
+This simulated data is used by the last two experiments, which are more relevant to what we're working on now.
+
+All bash scripts should be run from the hdag-benchmark directory, unless otherwise specified.
+
+
+## Simulation
+
+The general pipeline for simulating data you can run a batch of simulations with 
+
+    bash <path-to-simulation-script>/run_simulations_cluster.sh
+
+where `<path-to-simulation-script>` depends on whether you are running the data simulations for an experiment or not (e.g., `support_pipeline/scripts/mb_simulation_experiment`). Regardless, this method will extract tree topologies from the big UShER MAT, and simulates sequences for each clade using PhastSim on those topologies.
+
+If using the cluster driver in the `scripts` directory, these simulations can be found at `data/<clade-name>/<trial-number>/simulation`.
+Otherwise, they will be stored at a `simulation` directory that has a similar, but slightly different path that may depend on the experiment it came from.
+In this directory, `ctree_with_refseq.fasta` contains the leaves of the simulated tree and the ancestral sequence and `collapsed_simulated_tree.nwk` contains the simulated tree.
+
+## Inference
 
 After running simulations, you can infer supports using 
 
-    bash support_pipeline_scripts/run_inference_cluster.sh
+    bash <path-to-inference-script>/run_inference_cluster.sh <method-name>
 
-This has similar parameters to the simulation script near the top of the file
-
-    num_res=x
-    num_sim=y
-
-with the addition of
-
-    method="beast"
-
-which controls the method of inference. Currently, the script only supports `hdag` and `beast`.
 This will produce a `results.pkl` in the directory
 
     data/<clade-name>/<trial-number>/results/<method>
