@@ -54,17 +54,19 @@ for clade in $(cat $script_dir/clades.txt); do
 
     # Randomly resolve
     for rseed in $(seq $num_res); do
+        # let "rseed=$rseed_+5" 
         echo "   $rseed"
         rdir=$clade/"resolved"/$rseed
         mkdir -p $rdir
         rtree=$rdir/rtree.nwk
         
         hdb resolve-multifurcations -i $ntree -o $rtree --resolve-seed $rseed --branch-len-model num-muts
+        echo "resolved"
 
         cat $script_dir/sim_params.txt | while read line
         do
             [[ $line =~ ^#.* ]] && continue
-
+            
             IFS=':' read -a arr <<< $line
             echo "Sim: ${arr[0]} Params: ${arr[1]}";
             
@@ -75,5 +77,6 @@ for clade in $(cat $script_dir/clades.txt); do
             $currdir/support_pipeline/scripts/mb_simulation_experiment/simulate_trial.sh $PWD $rseed $simdir $rtree "${arr[1]}"
         
         done
+
     done
 done

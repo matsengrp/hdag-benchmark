@@ -39,7 +39,8 @@ mrbayesfile=$mrbayesdir/run.mb
 
 # # Produce .mb file describing the mrbayes run (including input and output files)
 # python $currdir/support_pipeline/scripts/python_replace.py \
-#     $currdir/support_pipeline/scripts/mb_simulation_experiment/mb_files/run_${sim_model}.mb $ctreenexus $mrbayesoutput > $mrbayesfile
+#     $currdir/support_pipeline/scripts/mb_simulation_experiment/mb_files/run_unrest_hmut.mb \
+#     $ctreenexus $mrbayesoutput > $mrbayesfile
 # /fh/fast/matsen_e/whowards/MrBayes/src/mb -i $mrbayesfile
 
 ## --------------------------------------------------------------------- ##
@@ -49,18 +50,18 @@ mrbayesfile=$mrbayesdir/run.mb
 tree_file=$mrbayesdir/mrbayes-output.t
 
 
-# # Extract support from trees
-# rtree=$simdir/resolved_output.nwk
-# echo "===> Extracting supports..."
-# conda activate hdag-benchmark
-# python $currdir/support_pipeline/inference.py save_supports -m "mrbayes" \
-# -t $rtree \
-# -f $ctreefasta \
-# -i $tree_file \
-# -o $mrbayesdir/results.pkl
-# # --use_results
+# Extract support from trees
+rtree=$simdir/resolved_output.nwk
+echo "===> Extracting supports..."
+conda activate hdag-benchmark
+python $currdir/support_pipeline/inference.py save_supports -m "mrbayes" \
+-t $rtree \
+-f $ctreefasta \
+-i $tree_file \
+-o $mrbayesdir/results.pkl
+# --use_results
 
-python $currdir/support_pipeline/scripts/mb_simulation_experiment/mb_parsimony_distribution.py $sim_model $clade $trial
+# python $currdir/support_pipeline/scripts/mb_simulation_experiment/mb_parsimony_distribution.py $sim_model $clade $trial
 
 
 # python support_pipeline/inference.py save_supports -m "mrbayes" \

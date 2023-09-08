@@ -11,9 +11,7 @@ trial = sys.argv[3]
 
 
 # Number of trees in the MrBayes run
-num_trees = 5e4
 burnin = 0.9
-iter_per_sample = 1000
 
 dir_path = f"/fh/fast/matsen_e/whowards/hdag-benchmark/data/{experiment_type}/{clade}/{sim_type}/{trial}"
 
@@ -31,6 +29,13 @@ def main():
 def get_trees(input_path):
     i = -1
     leaf_map = {}
+
+    num_trees = 0
+    with open(input_path, 'r') as fh:
+        for line in fh:
+            if 'tree' in line.strip()[0:5]:
+                num_trees += 1
+
     with open(input_path, 'r') as fh:
         for line in fh:
             if '    ' in line[0:5]:

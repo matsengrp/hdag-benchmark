@@ -5,7 +5,7 @@ def collapse_tree(etetree, fasta):
     """Expects an ete tree with 'mutations' node attributes like that output by phastSim."""
     def node_delete(node):
         for child in node.children:
-            child.mutations.update(node.mutations)
+            child.mutations.extend(node.mutations)
         node.delete(prevent_nondicotomic=False)
 
     tree = etetree.copy()
@@ -40,6 +40,86 @@ def collapse_tree(etetree, fasta):
         raise RuntimeError("Non-unique leaf sequences in modified tree")
     return tree
 
+def deduplicate_tree(etetree, fasta):
+    """Expects an ete tree with 'mutations' node attributes like that output by phastSim.
+        Same functionality as collapse_tree but keeps nodes with 0 mutations.
+    """
+    def node_delete(node):
+        for child in node.children:
+            child.mutations.extend(node.mutations)
+        node.delete(prevent_nondicotomic=False)
+
+    collapse_tree = etetree.copy()
+
+    # collapse zero length internal edges
+    for node in collapse_tree.get_descendants():
+        if not node.is_leaf() and len(node.mutations) == 0:
+            node_delete(node)
+
+    # remove duplicate leaves which are grouped together
+    visited = set()
+    to_delete = []
+    to_delete_names = []
+    for leaf in collapse_tree.get_leaves():
+        parent = leaf.up
+        if id(parent) not in visited:
+            visited.add(id(parent))
+            identical_children = [node for node in parent.children
+                                  if node.is_leaf() and len(node.mutations) == 0]
+            to_delete.extend(identical_children[1:])
+            identical_children_names = [node.name for node in parent.children
+                                  if node.is_leaf() and len(node.mutations) == 0]
+            to_delete_names.extend(identical_children_names[1:])
+    
+    for n in to_delete:
+        node_delete(n)
+
+    # remove unifurcation
+    for node in collapse_tree.get_descendants():
+        if len(node.children) == 1:
+            node_delete(node)
+
+    # check leaf sequences are unique
+    leaves = collapse_tree.get_leaves()
+    leaf_seqs = {fasta[node.name] for node in leaves}
+    n = len(leaves) - len(leaf_seqs)
+
+    if len(leaves) != len(leaf_seqs):
+        raise RuntimeError("Non-unique leaf sequences in modified tree")
+    
+    tree = etetree.copy()
+    leaves = []
+    for i in range(5):
+        to_delete = []
+        for n in tree.get_leaves():
+            if n.name in to_delete_names:
+                to_delete.append(n)
+        for n in to_delete:
+            node_delete(n)
+        
+        to_delete = []
+        for n in tree.get_descendants():
+            if len(n.children) == 1 or (n.is_leaf() and n.name == ''):
+                to_delete.append(n)
+        for n in to_delete:
+            node_delete(n)
+        
+        leaves = tree.get_leaves()
+        leaf_seqs = {fasta[node.name] for node in leaves if len(node.name) > 0}
+        n = len(leaves) - len(leaf_seqs)
+
+        # print(tree)
+        # print(len(leaves), len(leaf_seqs))
+
+    if len(leaves) != len(leaf_seqs):
+        raise RuntimeError("Non-unique leaf sequences in modified tree")
+    
+    # print(collapse_tree)
+    # print("End of collapsed tree")
+    # print(tree)
+
+    return tree
+
 def load_phastsim_newick(newickstring):
     """phastSim puts commas in node attributes, which ete can't parse"""
     tree = ete3.Tree()
@@ -57,9 +137,9 @@ def load_phastsim_newick(newickstring):
             part += char
         strippedlist = part.split('{')[-1].split('}')[0]
         if len(strippedlist) == 0:
-            mutset = set()
+            mutset = list()  # TODO: This shouldn't be a set?
         else:
-            mutset = set(strippedlist.split(','))
+            mutset = list(strippedlist.split(','))
         current_node.add_feature("mutations", mutset)
         return current_node
 

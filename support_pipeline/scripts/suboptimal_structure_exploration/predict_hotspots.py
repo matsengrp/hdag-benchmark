@@ -1,6 +1,6 @@
 from collections import Counter
 import historydag as hdag
-​
+
 def get_muts(node):
     if node.is_ua_node():
         yield from ()
@@ -16,7 +16,7 @@ def get_muts(node):
             else:
                 for pbase, cbase, site in hdag.compact_genome.cg_diff(pnode.label.compact_genome, node.label.compact_genome):
                     yield pbase + str(site) + cbase
-​
+
 def predict_hotspots(dag):
     site_counter = Counter()
     mut_counter = Counter()

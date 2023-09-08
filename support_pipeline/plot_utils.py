@@ -236,6 +236,7 @@ def get_results_full(clade_dir, num_sim, method, results_name, skip_list=[], sup
 
     Removes any node with estimated support that is less than or equal to `support_removal_threshold`.
     """
+    raise Warning("Deprecating in favor of get_results_general")
 
     result_dict = {}
     for trial in range(1, num_sim+1):
@@ -310,21 +311,21 @@ def get_results_general(base_dir, num_sim, method, results_name, skip_list=[], s
                 results = pickle.load(f)
 
                 # NOTE: Removing leaves and UA node here
-                with_leaves = len(results)
-                leaf_in_tree = [int(result[2]) for result in results if len(result[0]) <= 1]
-                leaf_est_sup = [result[1] for result in results if len(result[0]) <= 1]
+                # with_leaves = len(results)
+                # leaf_in_tree = [int(result[2]) for result in results if len(result[0]) <= 1]
+                # leaf_est_sup = [result[1] for result in results if len(result[0]) <= 1]
                 # print(leaf_in_tree[0:10])
                 # print(leaf_est_sup[0:10])
-                results = [result for result in results if len(result[0]) > 1]
-                without_leaves = len(results)
-                if with_leaves != without_leaves:
-                    print(f"==> Removed {with_leaves - without_leaves} leaves \
-                        avg in_tree = {sum(leaf_in_tree) / len(leaf_in_tree)} \
-                        avg est_sup = {sum(leaf_est_sup) / len(leaf_est_sup)}")
+                results = [res for res in results if len(res[0]) > 1 and res[1] > support_removal_threshold]
+                # without_leaves = len(results)
+                # if with_leaves != without_leaves:
+                #     print(f"==> Removed {with_leaves - without_leaves} leaves \
+                #         avg in_tree = {sum(leaf_in_tree) / len(leaf_in_tree)} \
+                #         avg est_sup = {sum(leaf_est_sup) / len(leaf_est_sup)}... These should both be 1.0")
                 
                 result_dict[trial] = results
         except:
-            print(f"\tSkipping {clade_dir} {trial}")
+            print(f"\tSkipping {base_dir} {trial}")
             continue
     
     if len(result_dict) == 0:
@@ -333,12 +334,12 @@ def get_results_general(base_dir, num_sim, method, results_name, skip_list=[], s
 
     results_full = []
     for trial, results in result_dict.items():
-        for result in results:
-            node = result[0]
-            if len(node) > 1:       # Removing leaves
-                if result[1] <= support_removal_threshold:
-                    continue
-                results_full.append((result[0], result[1], result[2]))
+        results_full.extend(results)#[res for res in results if len(res[0]) > 1 and res[1] > support_removal_threshold])
+        # node = result[0]
+        # if len(node) > 1:       # Removing leaves
+        #     if result[1] <= support_removal_threshold:
+        #         continue
+        #     results_full.append((result[0], result[1], result[2]))
     
     print(f"\tsorting {len(results_full)} results...")
     random.shuffle(results_full)

@@ -22,23 +22,21 @@ eval "$(conda shell.bash hook)"
 conda activate hdag-benchmark
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
-for clade in $(cat clades.txt); do
+for clade in $(cat /fh/fast/matsen_e/whowards/hdag-benchmark/support_pipeline/scripts/diffused_sampling_experiment/clades.txt); do
     # if value of $var starts with #, ignore it
     [[ $clade =~ ^#.* ]] && continue
 
-    cladedir=data/$clade
-    trial_file="$cladedir/pars_div_trials"
-    t=$(cat $trial_file.txt)
+    cladedir=data/sim_models/$clade/gamma_10_hmut_50
 
     # TODO: Make a script for plotting clade results separate from trial results
     
-    for trial in $t; do
+    for trial in $(seq 25); do
         echo "$clade: $trial"
         outdir=$cladedir/$trial/figures/$method
         mkdir -p $outdir
 
-        results=$cladedir/$trial/results/$method/results.pkl
-        python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
+        # results=$cladedir/$trial/results/$method/results.pkl
+        # python support_pipeline/plotting.py coverage_trial_plot -i $results -o $outdir -c $clade -w 0.2 -m $method
         
         # results=$cladedir/$trial/results/$method/strat_dict_pars_weight.pkl
         # python support_pipeline/plotting.py agg_pars_weights -i $results -o $outdir -c $clade -w 0.2 -m $method
@@ -53,8 +51,8 @@ for clade in $(cat clades.txt); do
     mkdir -p $outdir
 
     # Convert space seperated list of trials to comma separated
-    echo $t | tr " " "," > script_temp.txt
-    t_comma=$(cat script_temp.txt)
+    # echo $t | tr " " "," > script_temp.txt
+    # t_comma=$(cat script_temp.txt)
     # rm script_temp.txt
 
     python support_pipeline/plotting.py clade_results \
@@ -62,8 +60,8 @@ for clade in $(cat clades.txt); do
     -c $cladedir \
     -m $method \
     -r results.pkl \
-    -o $outdir/CA_support.png \
-    -t $t_comma
+    -o $outdir/CA_support.png
+    # -t $t_comma
 
     # NOTE: This code generates estimated supports for adjustment
     # python support_pipeline_scripts/cli.py clade_results \

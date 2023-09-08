@@ -33,17 +33,22 @@ head -2 $ctreefasta_with_refseq | tail -n +2 > $refseqfile
 seedtree=$dagdir/seedtree.pb
 
 mkdir -p $dagdir/opt_info
-optdag_final=final_opt_dag
+optdag_final=final_opt_dag_trimmed
 
 # TODO: Uncomment this when you want to search for new trees ---v
 # $ctreevcf contains the ancestral sequence and all the other simulated sequences
-echo "===> create tree with UShER..."
-usher-sampled -v $ctreevcf -t $starttree -o $seedtree --optimization_minutes=0 -d $dagdir/opt_info
+# echo "===> create tree with UShER..."
+# usher-sampled -v $ctreevcf -t $starttree -o $seedtree --optimization_minutes=0 -d $dagdir/opt_info
 
-echo "===> lusher optimizing..."
-log_prefix=$dagdir/opt_info/optimization_log
-python $currdir/support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 5000 -o $dagdir -l $log_prefix -f $optdag_final
+# echo "===> lusher optimizing..."
+# log_prefix=$dagdir/opt_info/optimization_log
+# python $currdir/support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 5000 -o $dagdir -l $log_prefix -f $optdag_final
 
+# python $currdir/support_pipeline/inference.py save_supports -m "hdag" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl -f $ctreefasta # --use_results
 
-python $currdir/support_pipeline/inference.py save_supports -m "hdag" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl -f $ctreefasta # --use_results
-
+# Sample from diffused dag distribution and save in input file
+diff_dagdir=$resultsdir/diff_historydag_mut_rates
+mkdir -p $diff_dagdir
+python $currdir/support_pipeline/inference.py diffused_hdag_samples -o $diff_dagdir/diff_sample.trees \
+-i $dagdir/$optdag_final.pb -n 100000 -f $ctreefasta -m $simdir/sars-cov-2_simulation_output.info
+python $currdir/support_pipeline/inference.py save_supports -m "hdag-diff" -t $ctree -i $diff_dagdir/diff_sample.trees -o $diff_dagdir/results.pkl -f $ctreefasta # --use_results

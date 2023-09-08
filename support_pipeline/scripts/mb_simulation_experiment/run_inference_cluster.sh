@@ -27,6 +27,7 @@ for clade in $(cat $script_dir/clades.txt); do
 
     # Randomly resolve
     for trial in $(seq $num_trials); do
+        # let "trial=$trial_+5" 
 
         cat $script_dir/sim_params.txt | while read line
         do
@@ -40,7 +41,7 @@ for clade in $(cat $script_dir/clades.txt); do
 
             logfile=$resultsdir/inference_${method}.log
 
-            sbatch -c $num_cores -J "${arr[0]}|$clade|inference" -o $logfile -e $logfile.err \
+            sbatch -c $num_cores -t 10-0 -J "${arr[0]}|$clade|inference" -o $logfile -e $logfile.err \
             $currdir/support_pipeline/scripts/mb_simulation_experiment/infer_trial_${method}.sh $currdir $clade $trial "${arr[0]}"
         
         done

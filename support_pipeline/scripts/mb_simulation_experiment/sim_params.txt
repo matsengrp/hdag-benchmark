@@ -13,9 +13,27 @@
 #unrest_hmut_150_5:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.005 --hyperMutRates 150.0
 #unrest_hmut_200_5:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.005 --hyperMutRates 200.0
 #unrest_hmut_250_5:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.005 --hyperMutRates 250.0
-gamma_rv_10:--alpha 0.1
-gamma_rv_20:--alpha 0.2
+#gamma_rv_10:--alpha 0.1
+#gamma_rv_20:--alpha 0.2
+#unrest: 
 #
 #_unrest_hmut_150_10:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 150.0
 #_unrest_hmut_200_10:--categoryProbs 0.25 0.25 0.25 0.25 --categoryRates 0.1 0.5 1.0 2.0 --hyperMutProbs 0.01 --hyperMutRates 200.0
 #
+#gamma_30_hmut_150:--alpha 0.3 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#gamma_30_hmut_100:--alpha 0.3 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#gamma_30_hmut_50:--alpha 0.3 --hyperMutProbs 0.01 --hyperMutRates 50.0
+#gamma_20_hmut_150:--alpha 0.2 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#gamma_20_hmut_100:--alpha 0.2 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#gamma_20_hmut_50:--alpha 0.2 --hyperMutProbs 0.01 --hyperMutRates 50.0
+#gamma_10_hmut_150:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#gamma_10_hmut_100:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#gamma_10_hmut_200:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#gamma_20_hmut_200:--alpha 0.2 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#gamma_30_hmut_200:--alpha 0.3 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#gamma_5_hmut_50:--alpha 0.05 --hyperMutProbs 0.01 --hyperMutRates 50.0
+#gamma_5_hmut_100:--alpha 0.05 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#gamma_5_hmut_150:--alpha 0.05 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#gamma_5_hmut_200:--alpha 0.05 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#
+gamma_10_hmut_50:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 50.0

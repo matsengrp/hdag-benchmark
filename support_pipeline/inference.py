@@ -11,14 +11,21 @@ import subprocess
 # from newick_parser.tree_transformer import iter_nexus_trees
 from historydag import parsimony_utils
 from math import exp
+import numpy as np
+from scipy.linalg import expm
+
 import time
 
 import historydag as hdag
 from historydag import parsimony_utils
 from historydag.parsimony import build_tree
-from historydag.utils import count_labeled_binary_topologies
+from historydag.utils import count_labeled_binary_topologies, load_fasta
+from historydag.compact_genome import cg_diff
 
 from utils import get_true_nodes, make_results_list, reroot, get_history
+
+_pb_nuc_lookup = {0: "A", 1: "C", 2: "G", 3: "T"}
+_pb_nuc_codes = {nuc: code for code, nuc in _pb_nuc_lookup.items()}
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli():
@@ -31,10 +38,11 @@ def cli():
 @click.command("save_supports")
 @click.option('--method', '-m', default="hdag", help='method of inference.')
 @click.option('--tree_path', '-t', help='the newick file for the true tree.')
+@click.option('--fasta_path', '-f', default="", help='the fasta file for the true tree (optional).')
 @click.option('--input_path', '-i', help='the file containing inference results.')
 @click.option('--output_path', '-o', help='the file to save output to.')
 @click.option('--use_results', '-u', is_flag=True, help='edit the results file already stored at output path.')
-def save_supports(method, tree_path, input_path, output_path, use_results):
+def save_supports(method, tree_path, fasta_path, input_path, output_path, use_results):
     """
     A method for computing, formatting, and saving node supports for various methods of inference 
     Input:  method of inference (e.g., hdag, beast, dag-inf, hdag-adj, etc.),
@@ -49,16 +57,17 @@ def save_supports(method, tree_path, input_path, output_path, use_results):
         -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/simulation/collapsed_simulated_tree.nwk \
         -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/final_opt_dag.pb \
         -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/2/results/historydag/results_adj.pkl
-        """
+    """
 
     # Map of taxon id (e.g., s1, s4, etc) to full sequence
-    fasta_path = tree_path + ".fasta"
+
+    if fasta_path == "":
+        fasta_path = tree_path + ".fasta"
     taxId2seq = hdag.parsimony.load_fasta(fasta_path)
 
     # Compute the set of nodes that are in the true tree
-    node_set = get_true_nodes(tree_path)
+    node_set = get_true_nodes(tree_path, taxId2seq)
 
-    # TODO: What is the default behavior of flag
     if use_results:
         print("=> Using previous support results")
         with open(output_path, "rb") as f:
@@ -72,6 +81,8 @@ def save_supports(method, tree_path, input_path, output_path, use_results):
             p = "inf"
             adjust = False
             support_list = hdag_output_general(node_set, input_path, taxId2seq, pars_weight=p, adjust=adjust)#, true_tree_path=tree_path)
+        elif method == "hdag-diff":
+            support_list = nwk_sample_output(node_set, input_path)
         elif method[0:5] == "hdag-":
             if method[5:] == "inf":
                 p = "inf"
@@ -89,8 +100,8 @@ def save_supports(method, tree_path, input_path, output_path, use_results):
             support_list = ufboot_output(node_set, input_path)
         elif method == "beast":
             raise Exception("BEAST inference is currently not supported.")
-        elif method == "random":
-            support_list = random_output(node_set, input_path)
+        # elif method == "random":
+        #     support_list = random_output(node_set, input_path)
         else:
             raise Exception(f"Invalid method: {method}")
 
@@ -101,6 +112,16 @@ def save_supports(method, tree_path, input_path, output_path, use_results):
     with open(output_path, "wb") as f:
         pickle.dump(support_list, f)
     
+    # TODO: Debug the creation of the node set from the tree!
+    #       Bug found! Was not changing name of resolved node
+    # # But they aren't in the nodeset??
+    # for node in node_set:
+    #     print(node)
+
+    # # Many modes with in_tree = False are actually in the true tree
+    # no_leaves = [el for el in support_list if len(el[0]) > 1]
+    # for el in no_leaves[-50:]:
+    #     print(f"{el[2]}\t{el[0]}\t{el[1]}")
 
 
 ###################################################################################################
@@ -130,7 +151,7 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
 
     print(f"=> Parsimony score weight: k={pars_weight}")
 
-    larch_trim = True
+    larch_trim = False
     if larch_trim:
         executable = "/home/whowards/larch/larch/build/larch-usher"
         trimmed_path = ".".join(inp.split(".")[:-1]) + "_trimmed." + inp.split(".")[-1]
@@ -153,10 +174,9 @@ def hdag_output_general(node_set, inp, taxId2seq, pars_weight="inf", bifurcate=F
     print(f"=> Loading DAG took {(time.time() - start)/60} minutes")
 
     start = time.time()
-    dag.convert_to_collapsed()
     # TODO: Complete and collapse in larch too
     # dag.make_complete()
-    # dag.convert_to_collapsed()
+    dag.convert_to_collapsed()
     print(f"=> Collapsing DAG took {(time.time() - start)/60} minutes")
 
     if isinstance(pars_weight, str):
@@ -332,14 +352,6 @@ def larch_usher(executable, input, refseqfile, count, out_dir, final_dag_name, s
         raise Exception("Not enough iterations")
         return
 
-    """
-    # Test command
-    cd /fh/fast/matsen_e/whowards/hdag-benchmark/data/A/1/results/historydag;
-    /home/whowards/larch/larch/build/larch-usher -i complete_opt_dag.pb -c 20 -o ../historydag \
-    --move-coeff-nodes 1 \
-    --move-coeff-pscore 3 \
-    -l optimization_log_complete
-    """
 
     # Cast a wide net by prioritizing new nodes only
     print("Running initial iterations of larch-usher...")
@@ -525,11 +537,11 @@ def ufboot_output(node_set, input_file):
 
 
 ###################################################################################################
-###    Random   ###################################################################################
+###    Hdag Diffused   ############################################################################
 ###################################################################################################
         
-def random_output(node_set, tree_file):
-    """Same as hdag output, but for randomly generated file of ete trees.
+def nwk_sample_output(node_set, tree_file):
+    """Same as hdag output, but for file of ete trees.
     
     Command to test this on A.2.2/1:
         python support_pipeline_scripts/cli.py save_supports \
@@ -538,45 +550,34 @@ def random_output(node_set, tree_file):
         -i "/fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/1/results/random/random_trees.trees" \
         -o "/fh/fast/matsen_e/whowards/hdag-benchmark/data/AY.132/1/results/random/results.pkl"
     """
-    
-    leaves = [list(set(cu))[0] for cu in node_set if len(cu) == 1]
-    tree_list=[]
-    for i in range(200):
-        if i % 1000 == 0:
-            print(i)
-        t = ete.Tree()
-        random.shuffle(leaves)
-        t.populate(len(leaves), names_library=leaves)
-        tree_list.append(f"{t.write(format=9)}\n")
-        
-    with open(tree_file, "w") as f:
-        f.writelines(tree_list)
 
     total_trees = 0
     node2count = {}
-    f = open(tree_file, "r")
-    for i, line in enumerate(f.readlines()):
-        nw_str = line.strip()
-        tree = ete.Tree(nw_str, format=9)
+    with open(tree_file, "r") as f:
+        for line in f:
+            nw_str = line.strip()
+            if len(nw_str) == 0:
+                continue
+            tree = ete.Tree(nw_str, format=9)
 
-        node2cu = {}
-        curr_internal_name = 0
-        for node in tree.traverse("postorder"):
-            if node.is_leaf():
-                cu = [node.name]
-            else:
-                node.name = f"internal{curr_internal_name}"
-                curr_internal_name += 1
-                cu = []
-                for child in node.children:
-                    cu.extend(list(node2cu[child.name]))
-            
-            cu = frozenset(cu)
-            node2cu[node.name] = cu
-            if cu not in node2count:
-                node2count[cu] = 0
-            node2count[cu] += 1
-        total_trees += 1
+            node2cu = {}
+            curr_internal_name = 0
+            for node in tree.traverse("postorder"):
+                if node.is_leaf():
+                    cu = [node.name]
+                else:
+                    node.name = f"internal{curr_internal_name}"
+                    curr_internal_name += 1
+                    cu = []
+                    for child in node.children:
+                        cu.extend(list(node2cu[child.name]))
+                
+                cu = frozenset(cu)
+                node2cu[node.name] = cu
+                if cu not in node2count:
+                    node2count[cu] = 0
+                node2count[cu] += 1
+            total_trees += 1
 
     node2support = {}
     for node, count in node2count.items():
@@ -589,8 +590,98 @@ def random_output(node_set, tree_file):
 
     return make_results_list(node2support, node_set)
 
+@click.command("diffused_hdag_samples")
+@click.option('--out_file', '-o', help='path to pre-made larch-usher executable')
+@click.option('--input_dag', '-i', help='input MADAG. Does not trim or complete the given DAG..?')
+@click.option('--num_samples', '-n', default=1000, help='number of ete trees to sample from the given DAG')
+@click.option('--fasta_path', '-f', help='fasta path for given DAG that maps sequences to taxon id')
+@click.option('--mut_rates_path', '-m', default=None, help='phastSim true mutation rates file')
+@click.option('--branch_len', '-b', default=0.001, help='default branch length')
+def diffused_hdag_samples(input_dag, out_file, num_samples, fasta_path, mut_rates_path, branch_len):
+    dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(input_dag)
+    dag.make_complete()
+    dag.convert_to_collapsed()
+
+    substitution_model = np.array(
+            [
+                [-0.472, 0.039, 0.31, 0.123],
+                [0.14, -3.19, 0.022, 3.028],
+                [0.747, 0.113, -3.813, 2.953],
+                [0.056, 0.261, 0.036, -0.353]
+            ]
+        )
+    site2rates = {}
+    if mut_rates_path is not None:
+        with open(mut_rates_path, "r") as fh:
+            lines = fh.readlines()
+            for line in lines[1:]:
+                arr = line.strip().split("\t")
+
+                # Adjust based on gamma rate variation
+                site = int(arr[0])
+                rate = float(arr[1])
+                rate_mat = np.ones((4, 4)) * rate
+
+                # Adjust based on hypermutation
+                if arr[2] == "1":
+                    i = _pb_nuc_codes[arr[3]]
+                    j = _pb_nuc_codes[arr[4]]
+                    rate_mat[i, j] *= 50
+
+                Q = np.multiply(substitution_model, rate_mat)
+                for i in range(4):
+                    Q[i, i] -= np.sum(Q[i])
+                
+                site2rates[site] = Q
+
+    if mut_rates_path is not None:
+        sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), lambda n: prob_muts(n, site2rates, branch_len=branch_len))
+    else:
+        print("WARNING: Using naive prob_muts function")
+        sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), prob_muts_basic) 
+
+    with open(out_file, "w") as fh:
+        for _ in range(num_samples):
+            ete_tree = next(sampler)
+            # TODO: Figure out how to store mutations here?
+            fh.write(f"{ete_tree.write(format=9)}\n")
+
+
+def prob_muts(ete_node, site2rates, branch_len=1e-3):
+    muts = list(
+                    cg_diff(
+                        ete_node.up.compact_genome, ete_node.compact_genome
+                    )
+                )
+    prob_muts = 1
+
+    for old, new, site in muts:
+        i = _pb_nuc_codes[old]
+        j = _pb_nuc_codes[new]
+
+        Q = site2rates[site]
+        
+        assert all([np.isclose(np.sum(Q[i]), 0.0) for i in range(4)])
+        prob_mut = expm(branch_len*Q)[i, j]
+        assert prob_mut <= 1 and prob_mut >= 0
+        prob_muts *= prob_mut
+    
+    return prob_muts
+
+def prob_muts_basic(ete_node, scale=0.01):
+    muts = list(
+                    cg_diff(
+                        ete_node.up.compact_genome, ete_node.compact_genome
+                    )
+                )
+    return scale * 1 / (len(muts)+1)
+
+
+
+
 cli.add_command(larch_usher)
 cli.add_command(save_supports)
+cli.add_command(diffused_hdag_samples)
 
 
 if __name__ == '__main__':

@@ -37,7 +37,7 @@ for seed in $(seq 100); do
     full_sim_params="--outpath $simdir/ --seed $s --createFasta --createInfo --createNewick --createPhylip --treeFile $rtree --scale 0.00003344 --reference refseq.fasta --eteFormat 1 "$sim_params
     phastSim $full_sim_params
     
-    # NOTE: This does not collapse true tree
+    # NOTE: This does not collapse true tree anymore.
     # produces ctreefasta_with_refseq which doesn't contain reference sequence
     # throws error message if tree exhibits convergent evolution
     if hdb collapse-tree $simtree $simfasta $ctree; then

@@ -9,6 +9,7 @@ import ete3
 import pickle
 import random
 import math
+import pandas as pd
 
 # NOTE: These should probably be moved to a different folder..?
 import subprocess
@@ -99,7 +100,7 @@ def collapse_tree(input_newick, input_fasta, output_newick):
     with open(input_newick, 'r') as fh:
         intree = ct.load_phastsim_newick(fh.read())
     infasta = load_fasta(input_fasta)
-    outtree = ct.collapse_tree(intree, infasta)
+    outtree = ct.deduplicate_tree(intree, infasta)
     # # TODO:
     # ct.get_tree_stats(sim_dir)
 
@@ -198,7 +199,9 @@ def get_tree_stats(sim_dir):
                     curr = mut[0]
                     i = int(mut[1:-1])-1    # convert indices to 0-based
                     new = mut[-1]
-                    assert seq[i] == curr
+                    # assert seq[i] == curr
+                    if seq[i] != curr:
+                        print("WARNING: At index", i, "current nuc does not match nuc in mutation!")
                     seq = seq[:i] + new + seq[i + 1:]
         
         node.add_feature("sequence", seq)
@@ -233,18 +236,20 @@ def get_tree_stats(sim_dir):
     clade_dir = sim_dir.split("/")[0]
     usher_tree_path = clade_dir + "/tree.n.nwk"
     usher_tree = ete.Tree(usher_tree_path, format=1)
-    # Remove multifurcations
-    to_delete = []
-    for node in usher_tree.traverse():
-        # TODO: Add leaf check elsewhere as needed
-        if not node.is_root() and node.dist==0:
-            to_delete.append(node)
-    for node in to_delete:
-        node.delete(prevent_nondicotomic=False)
-    # Remove unifurcations
-    to_delete = [node for node in usher_tree.traverse() if len(node.children) == 1 and not node.is_root()]
-    for node in to_delete:
-        node.delete(prevent_nondicotomic=False)
+
+    # TODO: This is incorrect
+    # # Remove multifurcations
+    # to_delete = []
+    # for node in usher_tree.traverse():
+    #     # TODO: Add leaf check elsewhere as needed
+    #     if not node.is_root() and node.dist==0:
+    #         to_delete.append(node)
+    # for node in to_delete:
+    #     node.delete(prevent_nondicotomic=False)
+    # # Remove unifurcations
+    # to_delete = [node for node in usher_tree.traverse() if len(node.children) == 1 and not node.is_root()]
+    # for node in to_delete:
+    #     node.delete(prevent_nondicotomic=False)
 
     pars = 0
     multifurc_counts = Counter()
@@ -259,6 +264,7 @@ def get_tree_stats(sim_dir):
         if not node.is_leaf():
             multifurc_counts[len(node.children)] += 1
     
+    # NOTE: That this includes duplicate leaves
     stats_dict["usher_num_leaves"] = leaf_count
     stats_dict["usher_num_nodes"] = node_count
     stats_dict["usher_pars_score"] = pars
@@ -270,9 +276,6 @@ def get_tree_stats(sim_dir):
     with open(outfile, "w") as f:
         f.write(json.dumps(stats_dict, indent=4))
 
-    # TODO: This is wrong, right?
-    # if best_possible != max_score:
-    #     raise RuntimeError("Non-unique leaf sequences in modified tree")
 
 
 @cli.command()
@@ -308,17 +311,17 @@ def resolve_polytomy(tree, seed, branch_len_model):
     # TODO: Trying smaller values here (was 0.01)
     resolved_multifurc_len = 0.001
 
-    with open("refseq.fasta", "r") as f:
-        f.readline()
-        genome = f.readline()
-        genome_len = len(genome)
-        print("Genome has length", genome_len)
+    # with open("refseq.fasta", "r") as f:
+    #     f.readline()
+    #     genome = f.readline()
+    #     genome_len = len(genome)
+    #     print("Genome has length", genome_len)
 
     random.seed(seed)
     new_node_name = 1
 
     def jc_dist(num_mut):
-        # genome_len = 29904
+        genome_len = 29904
         mut_prop = num_mut / genome_len
         return -3/4 * math.log(1 - 4/3 * mut_prop)
 
@@ -344,7 +347,6 @@ def resolve_polytomy(tree, seed, branch_len_model):
 
                 # merge under a parent node
                 par.name = f"r{new_node_name}"
-                new_node_name += 1
                 par.add_child(node_list.pop(pair[1]))
                 par.add_child(node_list.pop(pair[0]))
 
@@ -369,6 +371,7 @@ def resolve_polytomy(tree, seed, branch_len_model):
             n.dist = branch_len
         
         _resolve(n, new_node_name) # Resolve the edges under given node
+        new_node_name += 1
 
 
 
@@ -478,7 +481,104 @@ def get_trial_info(clade_path, num_trials):
                     max_dist, "\t", \
                     dnapars_trees
                 )
+            
+# NOTE: There has to be a way to merge this method and the previous one.
+#       The only difference is that this one goes over hypermutation directory structure
+@cli.command()
+@click.option("-c", "--clade-path", help="Path to clade directory.")
+def get_hmut_info(clade_path):
+    hmut_params = [
+        (0.01, 200),
+        (0.001, 200),
+        (0.0001, 200),
+        (0.01, 20),
+        (0.001, 20),
+        (0.0001, 20)
+    ]
+    trials = [1, 2, 3]
 
+    param_trial_list = [(el1, el2) for el1 in hmut_params for el2 in trials]
+
+    trial_list = []
+
+    # Iterate over every combination of hmut param and trial
+    for (prob, rate), trial in param_trial_list:
+        base_path = f"{clade_path}/{prob}_{rate}/{trial}"
+
+        # dnapars_path = base_path + f"/simulation/dnapars/outfile"
+        log_path = base_path + "/results/historydag/opt_info/optimization_log_complete/logfile.csv"
+        sim_info_path = base_path + f"/simulation/tree_stats.json"
+        results_path = base_path + f"/results/historydag/results.pkl"
+        support_log_path = base_path + f"/results/inference_historydag.log"
+        
+        try:
+            with open(log_path, "r") as f:
+                mp_score = f.readlines()[-1].split("\t")[4]
+
+            with open(results_path, "rb") as f:
+                results = pickle.load(f)
+                results_in_hdag = [res for res in results if res[1] > 0]
+                num_nodes = len(results_in_hdag)
+
+            with open(sim_info_path, "r") as f:
+                tree_stats = json.load(f)
+                toi_score = int(tree_stats['max_score_top'])
+                toi_num_nodes = int(tree_stats['num_nodes'])
+                toi_num_leaves = int(tree_stats['num_leaves'])
+                toi_num_internal = toi_num_nodes - toi_num_leaves
+
+            with open(support_log_path, "r") as f:
+                line = f.read().split("=>")[-1].strip()
+                assert "DAG contains " in line
+                num_trees = int(line.split(" ")[2])
+
+                # TODO: Include distribution of distances to true tree
+                # counter_text = line.split("\n")[3][9:-2]
+                # kv_text_list = counter_text.split(", ")
+                # dists = {}
+                # for string in kv_text_list:
+                #     num_list = string.split(": ")
+                #     dist = int(num_list[0])
+                #     count = int(num_list[1])
+                #     dists[dist] = count
+                # closest_dist = min(list(dists.keys()))
+                # max_dist = max(list(dists.keys()))
+                closest_dist, max_dist = None, None
+            
+            trial_list.append((prob, rate, trial, num_trees, num_nodes, toi_num_internal, toi_score, mp_score)) #, closest_dist, max_dist))
+
+        except Exception as e:
+            print(e)
+            continue
+
+    trial_list.sort(key=lambda el: el[3], reverse=True)
+    trial_list.sort(key=lambda el: el[4], reverse=True)
+
+    df = pd.DataFrame(trial_list, columns =["prob", "rate", "trial", "num_trees", "num_nodes", "toi_num_internal", "toi_score", "mp_score"])
+    print(df)
+
+    with open(f"{clade_path}/clade_sim_info.txt", "w") as f:
+        # print('prob, rate, trial, num_trees, num_nodes, toi_internal, toi_score, mp_score')
+        f.write('prob, rate, trial,\t num_trees, num_nodes, toi_internal\t toi_score, mp_score\n')
+        # for prob, rate, trial, num_trees, num_nodes, toi_num_internal, toi_score, mp_score in trial_list:
+        #     f.write(f"{prob * rate}\t{prob}\t{rate}\t{trial}\t\t{num_trees}\t{num_nodes}\t{toi_num_internal}\t\t{toi_score}\t{mp_score}\n")
+        #     print(
+        #         prob * rate, "\t", \
+        #         prob, "\t", \
+        #         rate, "\t", \
+        #         trial, "\t", \
+        #         num_trees, "\t", \
+        #         num_nodes, "\t", \
+        #         toi_num_internal, "\t", \
+        #         toi_score, "\t", \
+        #         mp_score, "\t", \
+        #         # closest_dist, "\t", \
+        #         # max_dist, "\t", \
+        #         )
+
+
+
+# NOTE: This code was moved to its own file because bte is incompattible with the rest of the conda env
 # @cli.command()
 # @click.option("-c", "--clade-path", help="Path to clade directory.")
 # def reconstruct_fasta(clade_path):

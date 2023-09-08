@@ -22,14 +22,27 @@ from historydag import parsimony_utils
 from historydag.parsimony import parsimony_score, sankoff_upward, build_tree, sankoff_upward, load_fasta
 from historydag.utils import count_labeled_binary_topologies
 
-def get_true_nodes(tree_path):
+def get_true_nodes(tree_path, fasta=None):
     """ Given a newick file path, returns the set of all clades (as frozen sets of taxon ids)"""
 
     try:
-        tree = ete.Tree(tree_path)
+        tree = ete.Tree(tree_path, format=3)
     except:
         print("\n --- Warning: Returning empty node set --- \n")
         return set()
+    # NOTE: Removed this functionality for fast and non-silent failing
+    # try:
+    #     tree = ete.Tree(tree_path)
+    # except:
+    #     try:
+    #         assert fasta is not None
+    #         with open(tree_path, "r") as f:
+    #             phastsim_tree = load_phastsim_newick(f.read())
+    #             # TODO: Remove unifurcations and duplicate leaf nodes that have different names???
+    #             tree = fix_phastsim_tree(phastsim_tree, fasta)
+    #     except:
+    #         print("\n --- Warning: Returning empty node set --- \n")
+    #         return set()
 
     curr_internal_name = 0
     etenode2cu = {}
@@ -37,9 +50,9 @@ def get_true_nodes(tree_path):
         if node.is_leaf():
             cu = [node.name]
         else:
-            if len(node.name) == 0:             # No name
-                node.name = curr_internal_name
-                curr_internal_name += 1
+            # if (node.name) == 0:             # No name
+            node.name = curr_internal_name
+            curr_internal_name += 1
             cu = []
             for child in node.children:
                 cu.extend(list(etenode2cu[child.name]))
@@ -47,6 +60,117 @@ def get_true_nodes(tree_path):
         etenode2cu[node.name] = frozenset(cu)
 
     return set([v for k, v in etenode2cu.items()])
+
+
+### Adapted from hdb collapse_tree.py #############################################################
+
+# def load_phastsim_newick(newickstring):
+#     """phastSim puts commas in node attributes, which ete can't parse"""
+#     tree = ete.Tree()
+#     current_node = tree
+
+#     def internalnodecreate(sgen, part, current_node):
+#         n = current_node.add_child()
+#         return n
+
+#     def attributecreate(sgen, part, current_node):
+#         char = ''
+#         current_node.name = part
+#         while char != ']':
+#             _, char = next(sgen)
+#             part += char
+#         strippedlist = part.split('{')[-1].split('}')[0]
+#         if len(strippedlist) == 0:
+#             mutset = set()
+#         else:
+#             mutset = set(strippedlist.split(','))
+#         current_node.add_feature("mutations", mutset)
+#         return current_node
+
+#     def siblingcreate(sgen, part, current_node):
+#         pnode = current_node.up
+#         n = pnode.add_child()
+#         return n
+
+#     def moveup(sgen, part, current_node):
+#         return current_node.up
+
+#     def addbranchlength(sgen, part, current_node):
+#         idx, char = next(sgen)
+#         while newickstring[idx + 1] not in '([,):;':
+#             idx, nchar = next(sgen)
+#             char += nchar
+#         current_node.dist = float(char)
+#         return current_node
+
+#     tokens = {'(': internalnodecreate,
+#               '[': attributecreate,
+#               ',': siblingcreate,
+#               ')': moveup,
+#               ':': addbranchlength,
+#               ';': lambda _, __, cn: cn,}
+
+#     sgen = enumerate(newickstring)
+#     part = ''
+
+#     while True:
+#         try:
+#             current_idx, char = next(sgen)
+#             if char in tokens:
+#                 current_node = tokens[char](sgen, part, current_node)
+#                 part = ''
+#             else:
+#                 part += char
+#         except StopIteration:
+#             return tree
+        
+# def fix_phastsim_tree(etetree, fasta):
+#     """Expects an ete tree with 'mutations' node attributes like that output by phastSim."""
+#     def node_delete(node):
+#         for child in node.children:
+#             child.mutations.update(node.mutations)
+#         node.delete(prevent_nondicotomic=False)
+
+#     tree = etetree.copy()
+#     # NOTE: Do everything except this
+#     # # collapse zero length internal edges
+#     # for node in tree.get_descendants():
+#     #     if not node.is_leaf() and len(node.mutations) == 0:
+#     #         node_delete(node)
+
+#     # remove duplicate leaves which are grouped together
+#     visited = set()
+#     to_delete = []
+#     for leaf in tree.get_leaves():
+#         parent = leaf.up
+#         if id(parent) not in visited:
+#             visited.add(id(parent))
+#             identical_children = [node for node in parent.children
+#                                   if node.is_leaf() and len(node.mutations) == 0]
+#             to_delete.extend(identical_children[1:])
+
+#         # if leaf.name not in fasta.keys() and leaf.name not in to_delete:
+#         #     to_delete.append(leaf)
+    
+#     for n in to_delete:
+#         node_delete(n)
+
+#     # remove unifurcation
+#     for node in tree.get_descendants():
+#         if len(node.children) == 1:
+#             node_delete(node)
+
+#     print(tree)
+
+#     # check leaf sequences are unique
+#     leaves = tree.get_leaves()
+#     leaf_seqs = {fasta[node.name] for node in leaves}   # TODO: Why are there empty nodes in the tree?
+#     n = len(leaves) - len(leaf_seqs)
+#     if len(leaves) != len(leaf_seqs):
+#         raise RuntimeError("Non-unique leaf sequences in modified tree")
+#     return tree
+
+###################################################################################################
 
 # TODO: This could probably go back in the inference pipeline
 def make_results_list(node2support, node_set, seq2taxId=None, log_prob=True):
@@ -179,3 +303,34 @@ def get_mrbayes_trees(trees_file):
                     node.name = translate_dict[node.name]
                 # put original ambiguous sequences back on leaves
                 yield tree
+
+
+def larch(input, out_dir, count=1000, executable=None, move_coeff=1, pscore_coeff=3):
+    """Python method for driving larch"""
+    if executable is None:
+        executable = '/home/whowards/larch/larch/build/larch-usher'
+
+    if isinstance(input, str):
+        print("Using string as input")
+    else:
+        input_path = f"{out_dir}/sim_dag.pb"
+        print(f"Assuming input is historyDAG. Saving to disk at {input_path}...")
+        input.to_protobuf_file(input_path)
+        input = input_path
+
+    os.chdir(f"{out_dir}") # E.g., results/historydag/
+    log_dir = f"{out_dir}/opt_info/optimization_log"
+
+    print(f"Running {count} iterations of Larch...")
+    subprocess.run(["mkdir", "-p", f"{log_dir}"])
+    args = [executable,
+            "-i", f"{input}",
+            "-c", f"{count}",
+            "-o", f"{out_dir}/trimmed_opt_dag.pb",
+            "-l", f"{log_dir}",
+            "--move-coeff-nodes", str(move_coeff),
+            "--move-coeff-pscore", str(pscore_coeff),
+            "--sample-any-tree",
+            ]
+    with open(f"{log_dir}/mat_opt.log", "w") as f:
+        subprocess.run(args=args, stdout=f, stderr=f)
