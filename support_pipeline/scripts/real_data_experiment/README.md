@@ -4,7 +4,7 @@ This folder contains scripts for running a particular type of experiment.
 Rather than simulate data, we use the real data (as reconstructed from MAT datastructure and ancestral sequence), and run MrBayes on the resulting sequences.
 We then sample a tree from the MB posterior, treat that as the true tree, and use CA plots to evaluate our method wrt to this tree.
 
-We are shifting to this evaluation procedure because it was hard to simulate realistic data.
+We are thinking about shifting to this evaluation procedure because it was hard to simulate realistic data.
 Specifically, in every simulation, there was little MP diversity (number of MP trees and types of nodes) on that data.
 
 Included scripts are variations on simulation, inference, and plotting scripts from parent directory. 

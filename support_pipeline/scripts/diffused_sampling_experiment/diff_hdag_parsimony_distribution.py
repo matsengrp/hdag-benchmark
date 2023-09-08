@@ -41,7 +41,6 @@ def prob_muts_basic(ete_node):
                         ete_node.up.compact_genome, ete_node.compact_genome
                     )
                 )
-    # TODO: Maybe this should be 0.001?
     return 0.01 * 1 / (len(muts)+1)
 
 def prob_muts(ete_node, site2rates, branch_len=1e-3):

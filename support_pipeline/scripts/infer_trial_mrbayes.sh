@@ -47,7 +47,6 @@ cd $datadir
 
 # Extract support from trees
 echo "===> Extracting supports..."
-conda activate hdag-benchmark
 python $currdir/support_pipeline/inference.py save_supports -m "mrbayes" -t $ctree -i $tree_file -o $mrbayesdir/results.pkl
 echo ""
 echo ""

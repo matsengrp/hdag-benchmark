@@ -144,4 +144,4 @@ for each clade and trial. This is a pickled list of tuples `(clade, estimate-sup
 2. `estimate-support` is the inferred support for that node.
 3. `in-tree` is a boolean that indicates whether that node is in the true tree.
 
-This direcotry also includes other information about the inference such as a log of trees for beast and the optimized dag.
+This directory also includes other information about the inference such as a log of trees for MrBayes and the optimized dag.

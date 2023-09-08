@@ -53,6 +53,8 @@ def cli():
     """
     pass
 
+
+
     
 @click.command("coverage_trial_plot")
 @click.option('--input', '-i', help='file path to input list as a pickle.')
@@ -1581,8 +1583,7 @@ def plot_sim_stats(data_path):
 @click.option("-d", "--data-path", help="Path to data directory.")
 def plot_sub_stats(data_path):
     """
-    Gather info about complex simulations with a variety of hypermutation scores and plot figures
-    summarizing that information.
+    Creates a swarmplot to visualize how different each simulated tree is from its closest MP tree.
     """
 
     num_trials = 25

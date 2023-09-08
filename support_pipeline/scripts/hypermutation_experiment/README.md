@@ -5,7 +5,7 @@ This folder contains scripts for investigating the effects of hypermutation (a s
 We are also interested in how the MP diversity (# MP trees collapsed, # of clades among MP trees) differs with hypermutation.
 
 ## Approach
-We simulate data with varying amounts of hypermutation, run MrBayes on it, and build a coverage plot to evaluate these effects.
+We simulate data with varying amounts of hypermutation, run hDAG/UFBoot/MrBayes on it, and build a coverage plot to evaluate these effects.
 
 
 # Instructions
