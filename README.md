@@ -1,5 +1,8 @@
 # hdag-benchmark
 
+This repository contains scripts for running experiments and generating figures for an in-review paper *Densely sampled phylogenies frequently deviate from maximum parsimony in simple and local ways* by William Howard-Snyder, Will Dumm, Mary Barker, Ognian Milanov, Claris Winston, David H. Rich, and Frederick A Matsen IV.
+A more thorough description of how to use this codebase to reproduce our results will be added shortly.
+
 ## Dependencies
 
 Clone this repository, and `cd` into it.
