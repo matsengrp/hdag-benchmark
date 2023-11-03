@@ -1,7 +1,6 @@
 # hdag-benchmark
 
 This repository contains scripts for running experiments and generating figures for an in-review paper *Densely sampled phylogenies frequently deviate from maximum parsimony in simple and local ways* by William Howard-Snyder, Will Dumm, Mary Barker, Ognian Milanov, Claris Winston, David H. Rich, and Frederick A Matsen IV.
-A more thorough description of how to use this codebase to reproduce our results will be added shortly.
 
 ## Dependencies
 
@@ -12,11 +11,71 @@ Install dependencies via:
     conda activate hdag-benchmark
     pip install -e .
 
-We also make heavy use of the historyDAG repository.
-The branch that we're using currently is `whs-diffused-madag-sampler` (once this is merged into main, we'll probably switch to that).
+We also make heavy use of the [historyDAG repository](https://github.com/matsengrp/historydag).
+The branch that we're using currently is `whs-diffused-madag-sampler`.
 You can access it by cloning the repository and running `pip install -e .` once inside.
+We also use the C++ implementation of the history sDAG, Larch, from [this repo](https://github.com/matsengrp/larch).
+You can access it by cloning the repository and running the build instructions.
+
+Many of the scripts described below use assume access to a cluster and attempt to access it via the slurm commands.
+
+## Main Results Replication: _Densely sampled phylogenies frequently deviate from maximum parsimony in simple and local ways_
+
+Here we describe how to use this codebase to reproduce our main results.
+All scripts should be run from immediately within the `hdag-benchmark` directory.
+
+## Simulations
+We simulate data by running
+
+    bash support_pipeline/scripts/mb_simulation_experiemnt/run_simulations_cluster.sh
+
+This requires that each line of `sim_params.txt`corresponds to the rate variation commands we provide for phastSim.
+The command that we used to simulate data for our main results was
+
+    gamma_10_hmut_50:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 50.0
+
+which populates `data/sim_models/<clade>/<trial>/gamma_10_hmut_50/simulation` with the simulated data for each clade in `clades.txt` and trial.
+
+## MP Tree Search
+We produce large sets of histories stored as Mutation Annotated historyDAGs by running
+
+    bash support_pipeline/scripts/mb_simulation_experiemnt/run_inference_cluster.sh
+
+The resulting protobufs will be stored at this filepath for each clade and trial
+
+    data/sim_models/<clade>/<trial>/gamma_10_hmut_50/results/historydag/final_opt_dag_trimmed.pb
+
+and used for replicating the following results.
+
+## Proportion due to PCM (Figure 4)
+To generate the number of differences and proportion that are due to PCMs run
+
+    bash support_pipeline/scripts/suboptimal_cluster_exploration/cluster_driver.sh
+
+which runs the `compare_trial.py` script for each clade and trial. To plot the swarmplot from Figure 4 of our paper, run
+
+    bash support_pipeline/plotting.py plot_sub_stats -d ~/hdag-benchmark/data/sub_struct
+
+This will produce and save the swarmplot and histogram at `hdag-benchmark/data/sub_struct/figures/proportion_duplicate_swarm_per_clade.pdf`.
+
+
+## RF-Scaling (Figure 3a)
+
+To generate the time data for finding the minimum RF-distance tree run
+
+    bash support_pipeline/scripts/rf_dist_scaling_experiment/cluster_driver.sh
+
+which runs the `rf_scaling.py` script for each clade and trial. To plot the scatterplot from Figure 4 of our paper, adjust the `datapath` variable in the `plot_rf_scaling()` method of `support_pipeline/plotting.py` to point to the `data/rf_scaling` directory and run
+
+    bash support_pipeline/plotting.py plot_rf_scaling
+
+This will save the scatterplot to `hdag-benchmark/data/rf_scaling/figures/scaling.pdf`.
+
+
 
 ## Directory Description
+
+The rest of this README describes the rest of the code that is not used in our most recent paper.
 
 ### Scripts
 
