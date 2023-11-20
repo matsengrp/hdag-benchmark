@@ -24,18 +24,18 @@ import seaborn as sns
 sns.set_theme()
 sns.set_style("white")
 
-# mpl.rcParams.update({
-#     'font.size': 16,
-#     'axes.titlesize': 17,
-#     'axes.labelsize': 16,
-#     'xtick.labelsize': 13,
-#     'ytick.labelsize': 13,
-#     'font.family': 'sans-serif',
-#     'font.weight': 600,
-#     'axes.labelweight': 600,
-#     'axes.titleweight': 600,
-#     'figure.autolayout': True
-#     })
+mpl.rcParams.update({
+    'font.size': 16,
+    'axes.titlesize': 17,
+    'axes.labelsize': 16,
+    'xtick.labelsize': 13,
+    'ytick.labelsize': 13,
+    'font.family': 'sans-serif',
+    'font.weight': 600,
+    'axes.labelweight': 600,
+    'axes.titleweight': 600,
+    'figure.autolayout': True
+    })
 
 
 colors = [
@@ -140,17 +140,17 @@ def clade_results(clade_dir, out_path, num_sim, method, window_proportion, resul
 
     print(f"\tgenerating window plot at {out_path}...")
     if method == "mrbayes":
-        window_size = 100
+        window_size = 200
     else:
         # window_size = int(len(results_full) * window_proportion)
-        window_size = 100
+        window_size = 200
 
     # Sliding window plot
     x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
 
     f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
-    f.set_size_inches(7, 9)
-    clade_name = clade_dir.split("/")[-1] # TODO: This is a terrible way to get the clade name. Change it.
+    f.set_size_inches(7, 8.5)
+    clade_name = clade_dir.split("/")[2] # TODO: This is a terrible way to get the clade name. Change it.
     ax1.set_title(f"Clade {clade_name} Coverage Analysis")
 
     ax1.set_ylabel(f"Empirical Probability (window_size={window_size}/{len(results_full)})")
@@ -381,6 +381,85 @@ def compare_clade_results(clade_dir, out_path, method1, method2, results_name, t
     # plt.legend()
     # plt.savefig(out_path + f"/clade_comparison_{method1}_{method2}.png")
 
+# TODO: Generate plot for each method
+@click.command("compare_multi_clade_results")
+@click.option('--base_dir', '-c', help='path to base directory where all clades reside.')
+@click.option('--results_name', '-r', default="results.pkl", help='name of file (including path extension e.g. pkl).')
+@click.option('--method', '-m', default='historydag,')
+@click.option('--support_removal_threshold', '-t', default=0.01)
+def compare_multi_clade_results(base_dir, method, results_name, support_removal_threshold):
+    """
+    Generates CA plot by combining inferences across all clades for a given directory.
+
+    E.g.
+python support_pipeline/plotting.py compare_multi_clade_results \
+-c /fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models \
+-r results.pkl \
+-t 0.01 \
+-m historydag,diff_historydag,ufboot,mrbayes
+    """
+    method_str = method
+    if ',' not in method:
+        methods = [method]
+    else:
+        methods = method.split(",")
+        if len(methods[-1]) == 0:
+            methods = methods[:-1]
+
+    method2color = {m: colors[i] for i, m in enumerate(methods)}
+
+    clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'A.2.5', 'AY.87', 'AY.74', 'B.1.1.10', 'P.1.7']
+
+    trials = range(25)
+    for clade in clade_names:
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, height_ratios=[0.75, 0.25])
+        fig.set_size_inches(7, 9)
+        ax1.set_title(f"Coverage Analysis")
+        ax1.set_ylabel(f"Percentage Correct")
+        hist = []
+
+        print(f"generating window plot at {out_dir}...")
+        for method in methods:
+            print(f"Collecting results for {method}...")
+            results_full = []
+            for trial in trials:
+                fp = f"{base_dir}/{clade}/gamma_10_hmut_50/{trial}/results/{method}/{results_name}"
+                try:
+                    with open(fp, "rb") as f:
+                        results = pickle.load(f)
+                        cleaned_results = [result for result in results if len(result[0]) > 1 and result[1] > support_removal_threshold]
+                        
+                        # TODO: Adjust minimum cleaned results requirements...
+                        # if len(cleaned_results) > 90:
+
+                        print(clade, "\t with", len(cleaned_results))
+                        results_full.extend(cleaned_results)
+                except:
+                    continue
+        
+            print(f"Building sliding window plot...")
+            results_full.sort(key=lambda result: result[1])
+
+
+            if method == "mrbayes":
+                window_size = 200
+            else:
+                # window_size = int(len(results_full) * window_proportion)
+                window_size = 200
+
+            x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
+            ax1.plot(x, y, color=method2color[method], label=f"{method}")
+            # ax1.fill_between(x, pos_devs, neg_devs, alpha=0.1, color=method2color[method])
+
+            ax2.hist(hist, color=list(method2color.values()))
+
+        ax1.plot([0, 1], [0, 1], color="blue", alpha=0.5, label="ideal", linestyle="dashed")
+        ax1.legend()
+        
+        ax2.set_yscale("log")
+        ax2.set_xlabel("Estimated Support")
+        fig.savefig(out_dir + f"/clade_comparison_{method_str}")
+        fig.clf()
 
 @click.command("aggregate_results")
 @click.option('--base_dir', '-c', help='path to base directory where all clades reside.')
@@ -398,7 +477,7 @@ python support_pipeline/plotting.py aggregate_results \
 -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models/figures \
 -r results.pkl \
 -t 0.01 \
--m historydag,diff_historydag
+-m historydag,diff_historydag,ufboot,mrbayes
     """
     method_str = method
     if ',' not in method:
@@ -446,14 +525,14 @@ python support_pipeline/plotting.py aggregate_results \
 
 
         if method == "mrbayes":
-            window_size = 100
+            window_size = 200
         else:
             # window_size = int(len(results_full) * window_proportion)
-            window_size = 100
+            window_size = 200
 
         x, y, pos_devs, neg_devs = sliding_window_plot(results_full, std_dev=True, window_size=window_size)
         ax1.plot(x, y, color=method2color[method], label=f"{method}")
-        ax1.fill_between(x, pos_devs, neg_devs, alpha=0.1, color=method2color[method])
+        # ax1.fill_between(x, pos_devs, neg_devs, alpha=0.1, color=method2color[method])
 
         hist.append(x)
 
@@ -836,12 +915,19 @@ python support_pipeline/plotting.py hmut_coverage \
 #################################################
 
 @click.command("plot_pars_distribution")
-@click.option("-d", "--data-path", help="Path to data directory.")
+@click.option("-d", "--data-path", \
+              default="/fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models", \
+              help="Path to data directory.")
 @click.option("-i", "--input-name", default="mrbayes/mrbayes-pars-distr.pkl", \
-              help="Path to sample file to concatenate after clade, trial, sim_type.")
-def plot_pars_distribution(data_path, input_name):
+              help="Path to sample file to concatenate after `results`.")
+@click.option("-o", "--out-name", default="mrbayes/mrbayes-pars-distr.pkl", \
+              help="Name of output file to concatenate after `figures`.")
+def plot_pars_distribution(data_path, input_name, out_name):
     """
     Plot the distribution of parsimony scores for posterior given by samples at data_path
+python support_pipeline/plotting.py plot_pars_distribution \
+-i diff_historydag_mut_rates/pars_distr_p=0.1.pkl \
+-o diff_historydag_mut_rates/pars_distr_p=0.1.pdf
     """
     clade_names = [
         "AY.34.2",
@@ -860,7 +946,7 @@ def plot_pars_distribution(data_path, input_name):
         # "jc_rv_inv",
         # "jc_rv_inv_hmut",
         # "gtr",
-        # "unrest_hmut"
+        # "unrest_hmut",
         "gamma_10_hmut_50"
     ]
 
@@ -879,7 +965,7 @@ def plot_pars_distribution(data_path, input_name):
         pars_distr_path = base_path + f"/results/{input_name}"
         sim_info_path = base_path + f"/simulation/tree_stats.json"
 
-        fig_path = base_path + f"/figures/diff_historydag_mut_rates"    # TODO: May need to adjust this
+        fig_path = base_path + f"/figures/{out_name}"
 
         try:
             with open(pars_distr_path, "rb") as f:
@@ -892,13 +978,9 @@ def plot_pars_distribution(data_path, input_name):
         except Exception as e:
             print(e)
             continue
-        
-        # TODO:
-        # - plot distribution
-        # - aggregate
 
-        if not os.path.isdir(fig_path):
-            os.makedirs(fig_path)
+        # if not os.path.isdir(fig_path):
+        #     os.makedirs(fig_path)
 
         total_count = sum(pars_distr.values())
         width = 1
@@ -919,65 +1001,66 @@ def plot_pars_distribution(data_path, input_name):
             clade_sim_2_change[(clade_name, sim_type)] = []
         clade_sim_2_change[(clade_name, sim_type)].extend(relative_change_in_pars)
 
-        f = plt.figure(figsize=(6.4, 5.8))
+        f = plt.figure()
         plt.xticks(indexes, labels, rotation=45)
         plt.bar(indexes, values, width)
 
         plt.axvline(toi_score, color='red', linestyle='dashed', linewidth=1)
 
         plt.xlabel("Parsimony Score")
-        plt.ylabel("Posterior")
-        plt.title(f"Parsimony Posterior for {clade_name} {sim_type}")
-        plt.savefig(f"{fig_path}/parsimony_distribution.png")
+        plt.ylabel("Probability")
+        plt.title(f"MP-Diffused Parsimony Posterior for {clade_name}")
+        plt.savefig(f"{fig_path}")
         plt.clf()
         plt.close()
 
-    for clade_name, sim_type, trial in param_trial_list:
-        if trial != 1:
-            continue
+    # model_name = None
+    # for clade_name, sim_type, trial in param_trial_list:
+    #     if trial != 1:
+    #         continue
 
-        base_path = f"{data_path}/{clade_name}/{sim_type}"
-        fig_path = base_path + f"/figures/diff_historydag_mut_rates"
-        if not os.path.isdir(fig_path):
-            os.makedirs(fig_path)
+    #     base_path = f"{data_path}/{clade_name}/{sim_type}"
+    #     fig_path = base_path + f"/figures/{model_name}"
+    #     if not os.path.isdir(fig_path):
+    #         os.makedirs(fig_path)
 
-        relative_change_list = clade_sim_2_change[(clade_name, sim_type)]
-        # print(relative_change_list)
+    #     relative_change_list = clade_sim_2_change[(clade_name, sim_type)]
+    #     # print(relative_change_list)
         
-        # Combine relative changes if they're the same value
-        # for change in relative_change_list:
-        relative_change = {}
-        for change, count in relative_change_list:
-            if change not in relative_change:
-                relative_change[change] = 0
-            relative_change[change] += count/(len(trials) * total_count)
+    #     # Combine relative changes if they're the same value
+    #     # for change in relative_change_list:
+    #     relative_change = {}
+    #     for change, count in relative_change_list:
+    #         if change not in relative_change:
+    #             relative_change[change] = 0
+    #         relative_change[change] += count/(len(trials) * total_count)
         
-        num_bins=10
-        min_change = min(relative_change.keys()) * 0.999
-        max_change = max(relative_change.keys()) * 1.001
-        spaces = np.linspace(min_change, max_change, num=num_bins+1)
-        bar = {}
-        for i, start in enumerate(spaces[:-1]):
-            val = 0
-            for change in relative_change.keys():
-                if change >= spaces[i] and change < spaces[i+1]:
-                    val += relative_change[change]
-            bar[start] = val
+    #     num_bins=10
+    #     min_change = min(relative_change.keys()) * 0.999
+    #     max_change = max(relative_change.keys()) * 1.001
+    #     spaces = np.linspace(min_change, max_change, num=num_bins+1)
+    #     bar = {}
+    #     for i, start in enumerate(spaces[:-1]):
+    #         val = 0
+    #         for change in relative_change.keys():
+    #             if change >= spaces[i] and change < spaces[i+1]:
+    #                 val += relative_change[change]
+    #         bar[start] = val
 
-        # print(bar)
+    #     # print(bar)
 
-        f = plt.figure(figsize=(6.4, 7))
-        plt.bar(bar.keys(), bar.values(), width=spaces[1]-spaces[0], align="edge")
-        plt.xticks(rotation=30)
+    #     f = plt.figure(figsize=(6.4, 7))
+    #     plt.bar(bar.keys(), bar.values(), width=spaces[1]-spaces[0], align="edge")
+    #     plt.xticks(rotation=30)
 
-        plt.axvline(0, color='red', linestyle='dashed', linewidth=2)
+    #     plt.axvline(0, color='red', linestyle='dashed', linewidth=2)
 
-        plt.xlabel("Relative Change in Parsimony Score (Sample - Sim) / Sim")
-        plt.ylabel("Posterior")
-        plt.title(f"Posterior on Relative Change in Parsimony {clade_name} {sim_type}")
-        plt.savefig(f"{fig_path}/parsimony_distribution_relative_change.png")
-        plt.clf()
-        plt.close()
+    #     plt.xlabel("Relative Change in Parsimony Score (Sample - Sim) / Sim")
+    #     plt.ylabel("Posterior")
+    #     plt.title(f"Posterior on Relative Change in Parsimony {clade_name} {sim_type}")
+    #     plt.savefig(f"{fig_path}/parsimony_distribution_relative_change.pdf")
+    #     plt.clf()
+    #     plt.close()
     
     # NOTE: For plotting multiple simulation types
     # sim2idx = {sim: (i//3, i%3) for i, sim in enumerate(sim_params)}
@@ -1030,6 +1113,104 @@ def plot_pars_distribution(data_path, input_name):
     #     plt.savefig(f"{fig_path}/parsimony_distribution_relative_change.png")
     #     plt.clf()
     #     plt.close()
+
+@click.command("plot_diff_pars_distribution")
+@click.option("-d", "--data-path", \
+              default="/fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models", \
+              help="Path to data directory.")
+@click.option("-i", "--input-name", default="diff_historydag_mut_rates", \
+              help="Directory to input to concatenate after `results`.")
+def plot_diff_pars_distribution(data_path, input_name):
+    """
+    Plot the distribution of parsimony scores for posterior given by samples at data_path
+    python support_pipeline/plotting.py plot_diff_pars_distribution
+    """
+    clade_names = [
+        "AY.34.2",
+        "AY.108",
+        "AZ.3",
+        "P.1.7",
+        "AY.74",
+        "AY.87",
+        "B.1.1.10",
+        "A.2.5"
+    ]
+
+    sim_params = [
+        "gamma_10_hmut_50"
+    ]
+
+    prob_vals = [0.5, 1, 1.5, 2, 2.5, 3, 5]
+
+    trials = range(1, 26)
+
+    param_trial_list = [(el1, el2, el3) for el1 in clade_names for el2 in sim_params for el3 in trials]
+
+    clade_sim_2_change = {}
+
+    # Iterate over every combination of hmut param and trial
+    for clade_name, sim_type, trial in param_trial_list:
+        if trial == 1:
+            print(clade_name, sim_type)
+        base_path = f"{data_path}/{clade_name}/{sim_type}/{trial}"
+
+        sim_info_path = base_path + f"/simulation/tree_stats.json"
+        fig_path = base_path + f"/figures/diff_historydag_mut_rates/pars_distr_all_pvals.pdf"
+
+        f = plt.figure()
+
+        data = {}
+
+        for prob_val in prob_vals:
+            prob_val /= 100
+            pars_distr_path = base_path + f"/results/diff_historydag_mut_rates/pars_distr_p={prob_val}.pkl"
+            try:
+                with open(pars_distr_path, "rb") as f:
+                    pars_distr = pickle.load(f)
+
+                with open(sim_info_path, "r") as f:
+                    tree_stats = json.load(f)
+                    toi_score = int(tree_stats['max_score_top'])
+
+            except Exception as e:
+                print(e)
+                continue
+
+            total_count = sum(pars_distr.values())
+            width = 1
+            indexes = np.array(range(min(int(min(pars_distr.keys())), toi_score), max(int(max(pars_distr.keys())), toi_score)+1))
+            values = []
+            labels = []
+            relative_change_in_pars = []
+            for i in indexes:
+                labels.append(i)
+                if i in pars_distr:
+                    values.append(pars_distr[i] / total_count)
+                else:
+                    values.append(0)
+
+                relative_change_in_pars.append(((i - toi_score)/toi_score, values[-1] * total_count))
+            
+            if (clade_name, sim_type) not in clade_sim_2_change:
+                clade_sim_2_change[(clade_name, sim_type)] = []
+            clade_sim_2_change[(clade_name, sim_type)].extend(relative_change_in_pars)
+
+            mean = sum([k * v for k, v in pars_distr.items()]) / total_count
+
+            plt.bar(indexes, values, width, label=f"{prob_val}: {mean:.1f}", alpha=0.4)
+
+            # TODO: How can I plot all the indices not just the last ones?
+            plt.xticks(indexes, labels, rotation=70)
+
+        plt.axvline(toi_score, color='red', linestyle='dashed', linewidth=2)
+
+        plt.xlabel("Parsimony Score")
+        plt.ylabel("Probability")
+        plt.legend(title="%-mutation : mean")
+        plt.title(f"MP-Diffused Parsimony Posterior for {clade_name}")
+        plt.savefig(f"{fig_path}")
+        plt.clf()
+        plt.close()
 
 
 
@@ -1257,12 +1438,14 @@ python support_pipeline/plotting.py sim_model_coverage \
     fig.clf()
 
 
-@click.command("plot_sim_stats")
-@click.option("-d", "--data-path", help="Path to data directory.")
-def plot_sim_stats(data_path):
+@click.command("plot_pd_heatmaps")
+@click.option("-d", "--data-path", \
+              default="/fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models", \
+              help="Path to data directory.")
+def plot_pd_heatmaps(data_path):
     """
     Gather info about complex simulations with a variety of hypermutation scores and plot figures
-    summarizing that information.
+    summarizing the parsimony diversities in a heatmap.
     """
 
     num_trials = 5
@@ -1286,11 +1469,8 @@ def plot_sim_stats(data_path):
         # hmut = 0, gamma varies
         "gamma_rv_10",
         "gamma_rv_20",
+        "gamma_rv_30",
         # gamma and hmut vary
-        "gamma_5_hmut_50",
-        "gamma_5_hmut_100",
-        "gamma_5_hmut_150",
-        "gamma_5_hmut_200",
         "gamma_10_hmut_50",
         "gamma_10_hmut_100",
         "gamma_10_hmut_150",
@@ -1306,8 +1486,163 @@ def plot_sim_stats(data_path):
     ]
 
     trials = range(1, num_trials+1)
-
     param_trial_list = [(el1, el2, el3) for el1 in clade_names for el2 in hmut_params for el3 in trials]
+    trial_list = []
+
+    # Iterate over every combination of hmut param and trial
+    for clade_name, sim_type, trial in param_trial_list:
+        base_path = f"{data_path}/{clade_name}/{sim_type}/{trial}"
+
+        log_path = base_path + "/results/historydag/opt_info/optimization_log_complete/logfile.csv"
+        sim_info_path = base_path + f"/simulation/tree_stats.json"
+        results_path = base_path + f"/results/historydag/results.pkl"
+        real_data_results_path = data_path + f"/../real_data/{clade_name}/results/historydag/results.pkl"
+        real_data_hdag_log_path = data_path + f"/../real_data/{clade_name}/results/historydag/opt_info/optimization_log_complete/logfile.csv"
+        real_data_fasta_path = data_path + f"/../real_data/{clade_name}/reconstructed_seqs.fasta"
+
+        try:
+            with open(real_data_fasta_path, "r") as f:
+                real_num_leaves = int(len(f.readlines())/2)
+
+            with open(log_path, "r") as f:
+                mp_score = int(f.readlines()[-1].split("\t")[4])
+
+            with open(results_path, "rb") as f:
+                results = pickle.load(f)
+                results_in_hdag = [res for res in results if res[1] > 0]
+                num_nodes = len(results_in_hdag)
+
+            with open(real_data_results_path, "rb") as f:
+                results = pickle.load(f)
+                results_in_hdag = [res for res in results if res[1] > 0]
+                real_data_num_nodes = len(results_in_hdag)
+
+            with open(sim_info_path, "r") as f:
+                tree_stats = json.load(f)
+                toi_score = int(tree_stats['pars_score'])
+                toi_num_leaves = int(tree_stats['num_leaves'])
+
+
+            if toi_score < mp_score:
+                print(f"{toi_score} and {mp_score}: Did not find MP trees in", clade_name, sim_type, trial)
+                continue
+
+            gamma = None
+            hmut = None
+            if sim_type.startswith("unrest"):
+                gamma = 0
+                hmut = int(sim_type.split("_")[2])
+            elif sim_type.startswith("gamma_rv"):
+                gamma = int(sim_type.split("_")[2]) / 100
+                hmut = 0
+            else:
+                gamma = int(sim_type.split("_")[1]) / 100
+                hmut = int(sim_type.split("_")[3])
+            
+            sim_type = (hmut, gamma)
+
+            trial_list.append((sim_type, (num_nodes / toi_num_leaves) / (real_data_num_nodes / real_num_leaves)))
+
+        except Exception as e:
+            print(e)
+            continue
+    
+    trial_list.sort(reverse=True, key=lambda el: el[1])
+    df = pd.DataFrame(trial_list, columns =["sim_type", "prop_new_nodes"])
+
+    # NOTE: We have the data for hmut=200, but it messes up the color scaling
+    heat_map_avg = np.zeros((4, 4))
+    heat_map_med = np.zeros((4, 4))
+    xs = df['sim_type'].to_numpy()
+    ys = df['prop_new_nodes'].to_numpy()
+    alpha_vals = [0, 0.1, 0.2, 0.3]
+    alpha_vals.sort(reverse=True)
+    hmut_vals = [0, 50, 100, 150]
+    # alpha_vals.sort(reverse=True)
+    for a in alpha_vals:
+        for h in hmut_vals:
+            key = (h, a)
+            trials = []
+            for x, y in zip(xs, ys):
+                if x == key:
+                    trials.append(y)
+            if len(trials) != 0:
+                avg = sum(trials) / len(trials)
+                trial_arr = np.array(trials)
+                med = np.median(trial_arr)
+            else:
+                med = np.nan
+                avg = np.nan
+            heat_map_med[alpha_vals.index(a), hmut_vals.index(h)] = med
+            heat_map_avg[alpha_vals.index(a), hmut_vals.index(h)] = avg
+    
+    # Plots average heatmap (not used in paper)
+    ax = sns.heatmap(heat_map_avg, linewidth=0.5, yticklabels=alpha_vals, xticklabels=hmut_vals,
+                     annot=True, vmin=0.5)
+    ax.set_title("Average CIPD")
+    ax.set_xlabel("Hypermutation Rate")
+    ax.set_ylabel("Alpha")
+    plt.savefig(data_path + f"/figures/PD_heat_map_avg_{len(clade_names)}_clades.png")
+    plt.clf()
+
+    # Median heatmap in supplementary material
+    ax = sns.heatmap(heat_map_med, linewidth=0.5, yticklabels=alpha_vals, xticklabels=hmut_vals,
+                     annot=True, vmin=0.5, cbar_kws={'label': 'Median CIPD'})
+    # ax.set_title("Median Parsimony Diversity")
+    ax.set_xlabel("Hypermutation Rate")
+    ax.set_ylabel("Alpha")
+    plt.savefig(data_path + f"/figures/PD_heat_map_med_{len(clade_names)}_clades.pdf")
+    plt.clf()
+
+
+@click.command("plot_sim_stats")
+@click.option("-d", "--data-path", help="Path to data directory.")
+def plot_sim_stats(data_path):
+    """
+    Gather info about complex simulations with a variety of hypermutation scores and plot figures
+    summarizing that information.
+    """
+
+    num_trials = 5
+    clade_names = [
+        "AY.34.2",
+        "AY.108",
+        "AZ.3",
+        "P.1.7",
+        "A.2.5",
+        "AY.74",
+        "AY.87",
+        "B.1.1.10"
+    ]
+
+    sim_params = [
+        # hmut varies, gamma = 0
+        "unrest_hmut_0",
+        # "unrest_hmut_50_10",
+        # "unrest_hmut_100_10",
+        # "unrest_hmut_150_10",
+        # # hmut = 0, gamma varies
+        # "gamma_rv_10",
+        # "gamma_rv_20",
+        # "gamma_rv_30",
+        # # gamma and hmut vary
+        "gamma_10_hmut_50",
+        # "gamma_10_hmut_100",
+        # "gamma_10_hmut_150",
+        # "gamma_10_hmut_200",
+        # "gamma_20_hmut_50",
+        # "gamma_20_hmut_100",
+        # "gamma_20_hmut_150",
+        # "gamma_20_hmut_200",
+        # "gamma_30_hmut_50",
+        # "gamma_30_hmut_100",
+        # "gamma_30_hmut_150",
+        # "gamma_30_hmut_200",
+    ]
+
+    trials = range(1, num_trials+1)
+
+    param_trial_list = [(el1, el2, el3) for el1 in clade_names for el2 in sim_params for el3 in trials]
 
     trial_list = []
 
@@ -1323,7 +1658,8 @@ def plot_sim_stats(data_path):
         real_data_hdag_log_path = data_path + f"/../real_data/{clade_name}/results/historydag/opt_info/optimization_log_complete/logfile.csv"
         real_data_fasta_path = data_path + f"/../real_data/{clade_name}/reconstructed_seqs.fasta"
 
-        try:
+        if True:
+        # try:
             with open(real_data_hdag_log_path, "r") as f:
                 real_mp_score = int(f.readlines()[-1].split("\t")[4])
 
@@ -1351,10 +1687,11 @@ def plot_sim_stats(data_path):
                 toi_num_leaves = int(tree_stats['num_leaves'])
                 toi_num_internal = toi_num_nodes - toi_num_leaves
 
-            with open(support_log_path, "r") as f:
-                line = f.read().split("=>")[-1].strip()
-                assert "DAG contains " in line
-                num_trees = int(line.split(" ")[2])
+            # with open(support_log_path, "r") as f:
+            #     line = f.read().split("=>")[-1].strip()
+            #     assert "DAG contains " in line
+            #     num_trees = int(line.split(" ")[2])
+            num_trees = -1
 
             if toi_score < mp_score:
                 print(f"{toi_score} and {mp_score}: Did not find MP trees in", clade_name, sim_type, trial)
@@ -1387,6 +1724,8 @@ def plot_sim_stats(data_path):
             
             sim_type = (hmut, gamma)
 
+            print(sim_type)
+
             trial_list.append((clade_name, sim_type, trial, num_trees, num_nodes, toi_num_internal, \
                 toi_num_leaves, real_num_leaves, toi_num_leaves / real_num_leaves, toi_score, mp_score, real_mp_score, \
                 (num_nodes / toi_num_leaves) / (real_data_num_nodes / real_num_leaves), \
@@ -1394,9 +1733,9 @@ def plot_sim_stats(data_path):
                 ((num_nodes / toi_num_leaves) - (real_data_num_nodes / real_num_leaves)) / (real_data_num_nodes / real_num_leaves),
                 max_score_for_top / toi_score))
 
-        except Exception as e:
-            print(e)
-            continue
+        # except Exception as e:
+        #     print(e)
+        #     continue
     
     trial_list.sort(reverse=True, key=lambda el: el[12])
     df = pd.DataFrame(trial_list, columns =["clade", "sim_type", "trial", \
@@ -1404,7 +1743,7 @@ def plot_sim_stats(data_path):
                 "prop_new_leaves", "toi_score", "mp_score", "real_mp_score", "prop_new_nodes", \
                 "suboptimality", "real_data_num_nodes", "prop_mp", "rel_change_new_nodes", \
                 "consistency_index"])
-    # print(df.to_string())
+    print(df.to_string())
 
     sns.set_theme()
     sns.set(font_scale=1.2)
@@ -1412,14 +1751,17 @@ def plot_sim_stats(data_path):
     x_col = "sim_type"
 
     fig, axes = plt.subplots()
-    fig.set_size_inches(10, 10)
-    sns.boxplot(x=x_col, y='prop_new_nodes', data=df, ax=axes)
+    # fig.set_size_inches(10, 10)
+    sns.boxplot(x=x_col, y='prop_new_nodes', data=df, ax=axes, palette=['#7570b3', '#d95f02']).set(xticklabels=["Ours", "MAPLE"])
     axes.yaxis.grid(True)
-    axes.set_xlabel('Parameter Values')
+    axes.set_xlabel('Simulation Type')
     axes.set_ylabel('CIPD')
+    plt.axhline(y=1, c='#1b9e77', linestyle="dashed", label="Realistic CIPD", linewidth=4)
+    # plt.axhline(y=0.97, c='#d95f02', linestyle="dotted", label="Median PD in\nour simulations", linewidth=2)
+    # plt.legend()
     axes.set_yscale("log", base=2)
-    plt.xticks(rotation=45)
-    plt.yticks([2 ** i for i in range(-2, 8, 2)])
+    # plt.xticks(rotation=45)
+    # plt.yticks([2 ** i for i in range(-2, 8, 2)])
     # plt.title("Difference in Parsimony Diversity")
     plt.savefig(data_path + f"/figures/real_comparison_pars_div_by_{x_col}_boxplot_{len(clade_names)}_clades.pdf")
     plt.clf()
@@ -1505,7 +1847,7 @@ def plot_sim_stats(data_path):
     plt.clf()
 
     ax = sns.heatmap(heat_map_med, linewidth=0.5, yticklabels=alpha_vals, xticklabels=hmut_vals,
-                     annot=True, vmin=0.5, cbar_kws={'label': 'Corrected PD Increase'})
+                     annot=True, vmin=0.5, cbar_kws={'label': 'Corrected Increase in PD'})
     # ax.set_title("Median Parsimony Diversity")
     ax.set_xlabel("Hypermutation Rate")
     ax.set_ylabel("Alpha")
@@ -1607,34 +1949,53 @@ def plot_sub_stats(data_path):
         line = f.readline()
         while not line.startswith("===") and line:
             line = f.readline()
-            # print(line)
-        # print(f.readline().strip().split("\t"))
         diffs = int(f.readline().strip().split("\t")[1])
         dups = int(f.readline().strip().split("\t")[1])
         return diffs, dups
-
-    diff_counts, dup_counts, name_trial = [], [], []
+    
+    sim_path = "/fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models"
+    diff_counts, dup_counts, name_trial, leaf_counts = [], [], [], []
 
     # Iterate over every combination of hmut param and trial
     for clade_name, sim_type, trial in param_trial_list:
         base_path = f"{data_path}/{clade_name}/{trial}"
         log_path = base_path + "/compare_trial.log"
+        tree_stats_json = f"{sim_path}/{clade_name}/{sim_type}/{trial}/simulation/tree_stats.json"
 
         try:
             with open(log_path, "r") as f:
                 diffs, dups = parse_dups(f)
+            with open(tree_stats_json, "r") as f:
+                mult_size2count = json.load(f)["usher_multifurc_distribution"]
+                avg_size = 0
+                num_multifurcs = 0
+                for size, count in mult_size2count.items():
+                    avg_size += int(size) * count
+                    num_multifurcs += count
+                avg_size /= num_multifurcs
+                num_leaves = avg_size # TODO: Change this to have the right name
         except Exception as e:
 
             print(f"MISSING: {clade_name} {trial} {e}")
             continue
-
-        diff_counts.append(diffs)
-        dup_counts.append(dups)
-        name_trial.append((clade_name, trial))
+        
+        if diffs > 0:
+            diff_counts.append(diffs)
+            dup_counts.append(dups)
+            name_trial.append((clade_name, trial))
+            leaf_counts.append(num_leaves)
+        else:
+            print("Skipping: No differences for", (clade_name, trial))
 
     print(f"{sum(dup_counts)} out of {sum(diff_counts)} ({sum(dup_counts) / sum(diff_counts) * 100:.2f}%) are due to PCM")
 
     proportion_dup = np.array([dup / diff if diff > 0 else 1 for dup, diff in zip(dup_counts, diff_counts)])
+
+    num_entirely_due_to_pcms = 0
+    for prop in proportion_dup:
+        if prop >= 1:
+            num_entirely_due_to_pcms += 1
+    print(num_entirely_due_to_pcms / len(proportion_dup), "trials are 100% pcm")
     srtd_idxs = np.argsort(proportion_dup)
     print("Top 10 worst trials are")
     for i in srtd_idxs[:10]:
@@ -1654,32 +2015,48 @@ def plot_sub_stats(data_path):
 
     clades = np.array([clade for clade, _ in name_trial])
     # Sort
-    proportion_dup = proportion_dup[srtd_idxs]
+    proportion_dup_srtd = proportion_dup[srtd_idxs]
     clades = clades[srtd_idxs]
+    leaf_counts = np.array(leaf_counts)[srtd_idxs]
     
     sns.set_theme(style="whitegrid", font_scale=1.25)
-    df = pd.DataFrame({"prop_dup": proportion_dup, "clade": clades})
-    fig, axes = plt.subplots()
+    df = pd.DataFrame({"prop_dup": proportion_dup_srtd, "clade": clades})
+    fig, (swarm_ax, hist_ax) = plt.subplots(ncols=2, sharey=True, figsize = (9.5, 3.5), gridspec_kw={'width_ratios': [4, 1]})
     
-    # fig.set_size_inches((8.5, 4.8))
-
-    
-    sns.swarmplot(x="clade", y='prop_dup', hue='clade', data=df, ax=axes, legend=False, size=4)
+    colors = ['#1b9e77','#d95f02','#7570b3','#e7298a','#66a61e','#e6ab02','#a6761d','#666666']
+    sns.set_palette(sns.color_palette(colors))
+    sns.swarmplot(x="clade", y='prop_dup', hue='clade', data=df, ax=swarm_ax, legend=False, size=7, alpha=0.8)
     df_means = df.groupby("clade")["prop_dup"].agg("mean").reset_index()
-    xlim = axes.get_xlim()
-    ylim = axes.get_ylim()
-    sns.scatterplot(x="clade", y="prop_dup", marker='X', color='black', s=130, zorder=3, ax=axes, legend=False, data=df_means)
-    axes.set_xlim(xlim)
-    axes.set_ylim(ylim)
-    plt.xticks(rotation=15)
+    xlim = swarm_ax.get_xlim()
+    ylim = swarm_ax.get_ylim()
 
-    plt.ylabel("Proportion Duplicate Nodes")
-    plt.xlabel("UShER Clade")
+    sns.scatterplot(x="clade", y="prop_dup", marker='X', color='black', s=250, zorder=3, ax=swarm_ax, legend=False, data=df_means)
+    swarm_ax.set_xlim(xlim)
+    swarm_ax.set_ylim(ylim)
+    for tick in swarm_ax.get_xticklabels():
+        tick.set_rotation(15)
+
+    swarm_ax.set_ylabel("Proportion Due to PCM")
+    swarm_ax.set_xlabel("UShER Clade")
+
+    hist_ax.hist(proportion_dup, orientation='horizontal', color='#7570b3')
+    hist_ax.set_xlabel("Number of \n Simulated Trees")
     plt.savefig(f"{data_path}/figures/proportion_duplicate_swarm_per_clade.pdf")
     plt.clf()
+    
+    plt.subplots(figsize=(6.4, 4.8))
+    # TODO: Make a scatter plot of total differences vs those that are due to PCM
+    # NOTE: Could color by clade using clade_name list and mapping to colors 
+    plt.scatter(diff_counts, proportion_dup, alpha=0.5)
+    plt.ylabel("Proportion Due to PCMs")
+    plt.xlabel("Number Differing Clades")
+    plt.savefig(f"{data_path}/figures/diff_vs_proportion_scatter.pdf")
+    plt.clf()
 
-    plt.hist(proportion_dup)
-    plt.savefig(f"{data_path}/figures/proportion_duplicate_histogram.pdf")
+    plt.scatter(leaf_counts, proportion_dup, alpha=0.5)
+    plt.ylabel("Proportion Due to PCMs")
+    plt.xlabel("Avg. Multifurcation Size")
+    plt.savefig(f"{data_path}/figures/leaf_count_pcm_scatter.pdf")
     plt.clf()
 
 #################################################
@@ -1867,22 +2244,138 @@ def examine_pcm_prob(data_path):
         plt.close()
 
 
+@click.command("plot_rf_scaling")
+def plot_rf_scaling():
+    """
+    Creates a scatterplot of number of histories vs time to find the minimum RF-distance history to
+    the reference history. 
+    """
 
+    data_path = "/fh/fast/matsen_e/whowards/hdag-benchmark/data/rf_scaling"
+
+    num_trials = 25
+    clade_names = [
+        "AY.34.2",
+        "AY.108",
+        "AZ.3",
+        "P.1.7",
+        "A.2.5",
+        "AY.74",
+        "AY.87",
+        "B.1.1.10"
+    ]
+    trials = range(1, num_trials+1)
+    param_trial_list = [(el1, el2) for el1 in clade_names for el2 in trials]
+
+    # Time = -1 if it hasn't finished yet
+    num_histories = []
+    min_trim_times = []
+    naive_times = []
+
+    for clade_name, trial in param_trial_list:
+        base_path = f"{data_path}/{clade_name}/{trial}"
+        # NOTE: Need to parse log files because you've populated the pickles previously
+        log_path_naive = f"{base_path}/rf_scaling_naive.log"
+        log_path_min_trim = f"{base_path}/rf_scaling_min_trim.log"
+
+        try:
+            with open(log_path_naive, "r") as f:
+                lines = f.readlines()
+                if len(lines) > 4:  # Finished running
+                    json_str = lines[-1].strip().replace("\'", "\"")
+                    stats_dict = json.loads(json_str)
+                    naive_time = float(stats_dict['clock_time']) / 60
+                    history_count = int(stats_dict['number_histories'])
+                else:
+                    naive_time = -1
+                    history_count = -1
+
+            with open(log_path_min_trim, "r") as f:
+                lines = f.readlines()
+                if len(lines) > 4:  # Finished running
+                    json_str = lines[-1].strip().replace("\'", "\"")
+                    stats_dict = json.loads(json_str)
+                    min_trim_time = float(stats_dict['clock_time']) / 60
+                    history_count = int(stats_dict['number_histories'])
+                else:
+                    min_trim_time = -1
+                    history_count= -1
+                
+        except Exception as e:
+            print(f"MISSING: {clade_name} {trial} {e}")
+            continue
+            
+        if history_count != -1:
+            num_histories.append(history_count)
+            min_trim_times.append(min_trim_time)
+            naive_times.append(naive_time)
+    
+    # Cull the coordinates to what you have data for
+    num_histories_naive = []
+    finished_naive_times = []
+    for time, count in zip(naive_times, num_histories):
+        if time != -1:
+            num_histories_naive.append(count)
+            finished_naive_times.append(time)
+    num_histories_min_trim = []
+    finished_min_trim_times = []
+    for time, count in zip(min_trim_times, num_histories):
+        if time != -1:
+            num_histories_min_trim.append(count)
+            finished_min_trim_times.append(time)
+
+    num_histories_min_trim = np.array(num_histories_min_trim, dtype=np.double)
+    num_histories_naive = np.array(num_histories_naive, dtype=np.double)
+    finished_min_trim_times = np.array(finished_min_trim_times, dtype=np.double)
+    finished_naive_times = np.array(finished_naive_times, dtype=np.double)
+
+    plt.figure(figsize=(6.4 * 0.7, 4.8))
+
+    plt.scatter(num_histories_min_trim, finished_min_trim_times, alpha=0.5, label="MinTrim", c="#1b9e77")
+    plt.scatter(num_histories_naive, finished_naive_times, alpha=0.5, label="Naive", c="#d95f02")
+
+    sorted_idxs = np.argsort(num_histories_min_trim)
+    num_histories_min_trim = num_histories_min_trim[sorted_idxs]
+    finished_min_trim_times = finished_min_trim_times[sorted_idxs]
+    sorted_idxs = np.argsort(num_histories_naive)
+    num_histories_naive = num_histories_naive[sorted_idxs]
+    finished_naive_times = finished_naive_times[sorted_idxs]
+
+    # Add trend lines
+    # trendline = np.polyfit(num_histories_min_trim, finished_min_trim_times, 1)
+    # plt.plot(num_histories_min_trim, trendline[0] * num_histories_min_trim + trendline[1], c="#1b9e77")
+    # trendline = np.polyfit(num_histories_naive, finished_naive_times, 1)
+    # plt.plot(num_histories_naive, trendline[0] * num_histories_naive + trendline[1], c="#d95f02")
+    plt.legend(prop={'size': 14})
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel("Number of Histories")
+    plt.ylabel("Compute Time (minutes)")
+    plt.savefig(f"{data_path}/figures/scaling.pdf")
+    plt.clf()
 
 #####
 #####
+
+cli.add_command(plot_diff_pars_distribution)
+
+cli.add_command(plot_rf_scaling)
+
 cli.add_command(examine_pcm_prob)
 cli.add_command(compare_mutation_probs)
 cli.add_command(plot_sub_stats)
 
 cli.add_command(plot_pars_distribution)
+cli.add_command(plot_pd_heatmaps)
 cli.add_command(plot_sim_stats)   # NOTE: This should probably go in the hmut stuff...
 cli.add_command(sim_model_coverage)
 cli.add_command(plot_sim_model_stats)
 
-cli.add_command(hmut_coverage)
+
 cli.add_command(plot_hmut)
 
+# Node support experimentation
+cli.add_command(hmut_coverage)
 cli.add_command(coverage_trial_plot)
 cli.add_command(compare_trial_results)
 cli.add_command(compare_results)
@@ -1892,7 +2385,8 @@ cli.add_command(aggregate_results)
 
 
 ###################################################################################################
-### NOTE: Methods below here have not been thoroughly checked
+### NOTE: Methods below here have not been thoroughly checked but were useful in previous
+###       iterations of this codebase.
 ###################################################################################################
 
 @click.command("agg_pars_weights")

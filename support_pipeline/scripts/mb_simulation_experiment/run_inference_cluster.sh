@@ -1,6 +1,6 @@
 #!/bin/bash
 
-num_trials=25
+num_trials=5
 num_cores=1
 
 method=$1

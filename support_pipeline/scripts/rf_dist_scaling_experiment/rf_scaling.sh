@@ -9,18 +9,18 @@ export QT_QPA_PLATFORM=offscreen; export XDG_RUNTIME_DIR=/tmp/runtime-runner; ex
 
 # NOTE: This file must have executable permissions to be used with cluster driver
 
-# This should always be the full path to data directory
-curr_dir=$1
-clade=$2
-trial=$3
+clade=$1
+trial=$2
+rf_method=$3
 
 echo $1
 echo $2
 echo $3
 
-python support_pipeline/scripts/suboptimal_structure_exploration/compare_trial.py $clade $trial
+python support_pipeline/scripts/rf_dist_scaling_experiment/rf_scaling.py $clade $trial $rf_method
 
-# bash support_pipeline/scripts/suboptimal_structure_exploration/compare_trial.sh \
-# /fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models \
+# E.g.
+# bash support_pipeline/scripts/rf_dist_scaling_experiment/rf_scaling.sh \
 # AY.34.2 \
-# 1
+# 1 \
+# min_trim

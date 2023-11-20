@@ -1,13 +1,13 @@
 # Description
 
-This folder contains scripts for better understanding the diffused sampling.
+This folder contains scripts for and plotting parsimony posterior that it induces.
 
 
 # Instructions
 
 *Assumes `data/sim_models` has been populated with 25 trials of `gamma_10_hmut_50` simulated data*
 
-Run `bash support_pipeline/scripts/hypermutation_experiment/cluster_driver.sh <name-of-script>` to run the script with the given name (in this directory) for each clade and trial on the cluster.
+Run `bash support_pipeline/scripts/diffused_sampling_experiment/cluster_driver.sh <name-of-script>` to run the script with the given name (in this directory) for each clade and trial on the cluster.
 
 The two options for `<name-of-script>` are currently,
 

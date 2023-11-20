@@ -38,27 +38,10 @@ optdag_final=final_opt_dag
 # # $ctreevcf contains the ancestral sequence and all the other simulated sequences
 # echo "===> create tree with UShER..."
 # usher-sampled -v $ctreevcf -t $starttree -o $seedtree  --optimization_minutes=0 -d $dagdir/opt_info
-
 # echo "===> lusher optimizing..."
 # log_prefix=$dagdir/opt_info/optimization_log
 # python ../support_pipeline/inference.py larch_usher -i $seedtree -r $refseqfile -c 10000 -o $dagdir -l $log_prefix -f $optdag_final
 
-# TODO: Rename 'hdag-...' -> 'historydag-...' and change save_supports method accordingly
-# NOTE: Saves single results list for MP trimmed node support
-# python ../support_pipeline/inference.py save_supports -m "hdag-adj" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/adjusted_support_results.pkl
-# TODO: Change back to optdag_final
+
 python ../support_pipeline/inference.py save_supports -m "hdag" -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/results.pkl
 
-# NOTE: Tests different trimming strategies for uniform node support.
-# python ../support_pipeline/inference.py trim_thresholds -t $ctree -i $optdag_final -o $dagdir/strat_dict.pkl
-
-# NOTE: Tests different weighting schemes for generalized node support.
-# python ../support_pipeline/inference.py test_pars_weights -t $ctree -i $dagdir/$optdag_final.pb -o $dagdir/strat_dict_node_weight.pkl
-echo ""
-echo ""
-
-# python ../support_pipeline/inference.py save_supports \
-# -m "hdag" \
-# -t /fh/fast/matsen_e/whowards/hdag-benchmark/data/${clade}_/reconstructed_seqs \
-# -i /fh/fast/matsen_e/whowards/hdag-benchmark/data/${clade}_/results/historydag/final_opt_dag.pb \
-# -o /fh/fast/matsen_e/whowards/hdag-benchmark/data/${clade}_/results/historydag/results.pkl

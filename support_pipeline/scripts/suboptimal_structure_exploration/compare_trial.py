@@ -212,7 +212,7 @@ def replace_site(site, newbase, sequence, oldbase=None):
 def subset_sequence(sequence, idxs):
     return ''.join(sequence[idx] for idx in sorted(idxs))
 
-def categorize_differences(mp_tree, sim_tree):
+def categorize_differences(mp_tree, sim_tree, uncollapsed_sim_tree):
     """
     Finds all the differing clades between mp_tree and sim_tree. Returns the count of those clades
     and how many of those are due to parallel child mutations (PCM). Will also return a list of the
@@ -220,9 +220,12 @@ def categorize_differences(mp_tree, sim_tree):
     """
     mp_tree.recompute_parents()
     sim_tree.recompute_parents()
+    uncollapsed_sim_tree.recompute_parents()
     mp_d = {n.clade_union(): n for n in mp_tree.preorder(skip_ua_node=True)}
     sim_d = {n.clade_union(): n for n in sim_tree.preorder(skip_ua_node=True)}
-    diff_clades = set(mp_d.keys()) - set(sim_d.keys())
+    uncollapsed_sim_d = {n.clade_union(): n for n in uncollapsed_sim_tree.preorder(skip_ua_node=True)}
+    
+    diff_clades = set(mp_d.keys()) - set(uncollapsed_sim_d.keys())
 
     total_diff_count = len(diff_clades)
 
@@ -284,7 +287,7 @@ def categorize_differences(mp_tree, sim_tree):
                 pcm_clades.add(cgclade2idclade[diff_clade])
                 print("\tCAUGHT NON-SIMPLE PCM!")
 
-            # DEBUG stuff
+            # is_complex should capture simple PCMs too
             assert not (is_simple_pcm and not is_complex_pcm)
 
 
@@ -400,6 +403,7 @@ for leaf in opt_dag.get_leaves():
 
 ref_seq = next(opt_dag.preorder(skip_ua_node=True)).label.compact_genome.reference
 sim_history = hdag.mutation_annotated_dag.CGHistoryDag.from_history_dag(sim_history, reference=ref_seq)
+sim_history_uncollapsed = sim_history.copy()
 sim_history.convert_to_collapsed()
 print("relabeled, now adding sim tree")
 
@@ -458,7 +462,8 @@ if sim_leaves != dag_leaves:
 
     raise Warning(f"Skipping due to DAG and data not having same leaves!!! {dagpath}")
 
-larch(sim_history, str(local_outpath), count=1000)
+# NOTE: Uncomment to include simulated tree and optimize it with larch
+# larch(sim_history, str(local_outpath), count=1000)
 opt_sim_dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(str(local_outpath) + "/trimmed_opt_dag.pb")
 
 opt_dag.merge([opt_sim_dag])
@@ -493,9 +498,11 @@ closest_pars_tree.recompute_parents()
 # We now have 'closest_pars_tree' and 'sim_history' to compare, however we'd
 # like to.
 
+# TODO: use uncollapsed history to determine whether the MP clade is in the simulated tree.
+
 print("Finding differing nodes...")
 snode, pnode = get_difference_ancestor(sim_history, closest_pars_tree)
-diffs, dups, pcm_clade_list = categorize_differences(closest_pars_tree, sim_history)
+diffs, dups, pcm_clade_list = categorize_differences(closest_pars_tree, sim_history, sim_history_uncollapsed)
 print(f"======\nTOTAL DIFFERENCES:\t{diffs}")
 print(f"TOTAL DUPLICATES:\t{dups}")
 print(f"======\n")
@@ -509,7 +516,7 @@ kwargs = {"name_func": lambda n: n.attr.get("name", "internal"),
                 "is_new": lambda n: n not in same_nodes,
                 "node_id": lambda n: str(same_nodes.get(n, "")),
             }
-            }
+        }
 ssubtree = snode.to_ete_recursive(**kwargs)
 psubtree = pnode.to_ete_recursive(**kwargs)
 

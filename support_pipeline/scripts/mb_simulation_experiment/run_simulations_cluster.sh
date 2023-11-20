@@ -2,7 +2,7 @@
 
 
 # Paramaters that determine how many trees to simulate for each clade
-num_res=25
+num_res=5
 num_sim=1
 num_cores=1
 

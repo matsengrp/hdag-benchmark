@@ -28,7 +28,7 @@ def get_true_nodes(tree_path, fasta=None):
     try:
         tree = ete.Tree(tree_path, format=3)
     except:
-        print("\n --- Warning: Returning empty node set --- \n")
+        print(f"\n --- Warning: Returning empty node set --- \n ete tree could not be loaded with format=3 and tree_path={tree_path}")
         return set()
     # NOTE: Removed this functionality for fast and non-silent failing
     # try:

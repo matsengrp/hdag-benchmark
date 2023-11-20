@@ -7,10 +7,10 @@
 # Paramaters that determine how many trees to simulate for each clade
 num_res=5
 num_sim=5
+num_cores=1
 
-num_cores=4
-trial_file="pars_div_trials"
 method=$1
+trial_file="pars_div_trials"
 
 let "num_trials = $num_sim * $num_res"
 
@@ -36,15 +36,15 @@ for clade in $(cat ../clades.txt); do
     cladedir=$datadir/$clade
 
     # Only go to trials that have high parsimony diversity...
-    for trial in $(cat $clade/$trial_file.txt); do
-    # for trial in $(seq $num_trials); do
+    # for trial in $(cat $clade/$trial_file.txt); do
+    for trial in $(seq $num_trials); do
         logfile=$clade/$trial/results/inference__$method.log
         echo $logfile $method
 
         mkdir -p $clade/$trial/results
         
         sbatch -t 6-0 -c $num_cores -J "$trial|$clade|inference" -o $logfile -e $logfile.err \
-        $currdir/support_pipeline/scripts/infer_trial_$method.sh $currdir $clade $trial
+        $currdir/support_pipeline/scripts/infer_trial_$method.sh $currdir $clade gamma_10_hmut_50/$trial
 
     done
 done

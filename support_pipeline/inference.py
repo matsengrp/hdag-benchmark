@@ -602,16 +602,16 @@ def diffused_hdag_samples(input_dag, out_file, num_samples, fasta_path, mut_rate
     dag.make_complete()
     dag.convert_to_collapsed()
 
-    substitution_model = np.array(
-            [
-                [-0.472, 0.039, 0.31, 0.123],
-                [0.14, -3.19, 0.022, 3.028],
-                [0.747, 0.113, -3.813, 2.953],
-                [0.056, 0.261, 0.036, -0.353]
-            ]
-        )
-    site2rates = {}
     if mut_rates_path is not None:
+        substitution_model = np.array(
+                [
+                    [-0.472, 0.039, 0.31, 0.123],
+                    [0.14, -3.19, 0.022, 3.028],
+                    [0.747, 0.113, -3.813, 2.953],
+                    [0.056, 0.261, 0.036, -0.353]
+                ]
+            )
+        site2rates = {}
         with open(mut_rates_path, "r") as fh:
             lines = fh.readlines()
             for line in lines[1:]:
@@ -634,11 +634,9 @@ def diffused_hdag_samples(input_dag, out_file, num_samples, fasta_path, mut_rate
                 
                 site2rates[site] = Q
 
-    if mut_rates_path is not None:
         sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), lambda n: prob_muts(n, site2rates, branch_len=branch_len))
     else:
-        print("WARNING: Using naive prob_muts function")
-        sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), prob_muts_basic) 
+        sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), lambda ete_node: 0.02) 
 
     with open(out_file, "w") as fh:
         for _ in range(num_samples):

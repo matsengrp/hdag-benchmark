@@ -11,7 +11,9 @@ trial = sys.argv[3]
 
 
 # Number of trees in the MrBayes run
-burnin = 0.9
+# burnin = 0.9
+# Ran MB on 10^8 trees outputing 1 / 1000 -> 10^5. This burnin gives 5000 trees
+burnin = 0.95
 
 dir_path = f"/fh/fast/matsen_e/whowards/hdag-benchmark/data/{experiment_type}/{clade}/{sim_type}/{trial}"
 

@@ -13,7 +13,7 @@ echo "=> Running $script_name with $num_trials trials on $num_cores cores..."
 
 set -eu
 eval "$(conda shell.bash hook)"
-conda activate hdag-benchmark
+conda activate base
 
 datadir=$PWD/data/sim_models
 script_dir=$PWD"/support_pipeline/scripts/diffused_sampling_experiment"
@@ -27,6 +27,7 @@ for clade in $(cat $script_dir/clades.txt); do
 
     for trial in $(seq $num_trials); do
         out_dir=$PWD/data/sim_models/$clade/gamma_10_hmut_50/$trial/results/diff_historydag
+        # NOTE: out_dir should already exist. If not, it's probably incorrectly formatted
         # mkdir -p $out_dir
         logfile=$out_dir/${script_name}.log
 

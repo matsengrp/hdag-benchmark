@@ -8,10 +8,10 @@
 
 set -eu
 method=$1
+sim_model="gamma_10_hmut_50"
 
-
-num_res=5
-num_sim=5
+num_res=25
+num_sim=1
 let "num_trials = $num_sim * $num_res"
 
 echo ""
