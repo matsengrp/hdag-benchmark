@@ -36,11 +36,12 @@ def main():
     for i in [0.5, 1, 1.5, 2, 2.5, 3, 5]:
         prob = i / 100
         print(prob)
-        distr = get_parsimony_distribution(dag_path, prob=prob)
-        print(f"Mean: {sum([k * v for k, v in distr.items()]) / sum([v for v in distr.values()])}")
-        print("\t", distr)
+        mutcount_distr = get_parsimony_distribution(dag_path, prob=prob)
+        print(f"Mutcount Mean: {sum([k * v for k, v in mutcount_distr.items()]) / sum([v for v in mutcount_distr.values()])}")
+        print("\t", mutcount_distr)
         with open(outdir + f"/pars_distr_p={prob}.pkl", "wb") as f:
-            pickle.dump(distr, f)
+            print(str(outdir))
+            pickle.dump(mutcount_distr, f)
 
 def prob_muts_basic(ete_node):
     muts = list(
@@ -116,7 +117,7 @@ def get_parsimony_distribution(input_path, prob=None):
 
     # TODO: Can use variant sites here
 
-    distribution = Counter()
+    mutcount_distribution = Counter()
     for i, tree in enumerate(sampler):
         for node in tree.traverse():
             if node.name in fasta:
@@ -124,26 +125,23 @@ def get_parsimony_distribution(input_path, prob=None):
             else:   
                 node.add_feature("sequence", var_fasta['ancestral'])
 
-        pars_best = sankoff_upward(
-                    tree,
-                    len(var_fasta['ancestral']),
-                    sequence_attr_name="sequence",
-                    transition_model=hdag.parsimony_utils.default_nt_transitions,
-                    use_internal_node_sequences=False,
-                )
+        # pars_best = sankoff_upward(
+        #             tree,
+        #             len(var_fasta['ancestral']),
+        #             sequence_attr_name="sequence",
+        #             transition_model=hdag.parsimony_utils.default_nt_transitions,
+        #             use_internal_node_sequences=False,
+        #         )
+
+        pars = sum(
+            len(list(cg_diff(node.up.compact_genome, node.compact_genome)))
+            for node in tree.traverse()
+            if not node.is_root()
+        )
         
-        if i % 100 == 0:
-            pars = 0
-            for node in tree.traverse():
-                if not node.is_root():
-                    pars += len(list(cg_diff(
-                            node.up.compact_genome, node.compact_genome
-                    )))
-            if pars != pars_best:
-                print("\t", i, pars, pars_best)
-        
-        distribution[pars_best] += 1
-    return distribution
+        # sankoff_distribution.update({pars_best: 1})
+        mutcount_distribution.update({pars: 1})
+    return mutcount_distribution
 
 
 if __name__ == '__main__':

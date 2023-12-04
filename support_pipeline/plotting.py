@@ -418,7 +418,6 @@ python support_pipeline/plotting.py compare_multi_clade_results \
         ax1.set_ylabel(f"Percentage Correct")
         hist = []
 
-        print(f"generating window plot at {out_dir}...")
         for method in methods:
             print(f"Collecting results for {method}...")
             results_full = []
@@ -458,8 +457,71 @@ python support_pipeline/plotting.py compare_multi_clade_results \
         
         ax2.set_yscale("log")
         ax2.set_xlabel("Estimated Support")
-        fig.savefig(out_dir + f"/clade_comparison_{method_str}")
+        output_path = base_dir + f"/clade_comparison_{method_str}"
+        print(f"generating window plot at {output_path}...")
+        fig.savefig(output_path)
         fig.clf()
+
+@click.command("plot_pcm_probabilities")
+@click.option('--base_dir', '-c', help='path to base directory where all clades reside.')
+@click.option('--out_dir', '-o', help='output directory to store figure')
+def plot_pcm_probabilities(base_dir, out_dir):
+    """
+    generates plot of pcm probabilities by clade.
+
+    E.g.
+python support_pipeline/plotting.py plot_pcm_probabilities \
+-c /fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models \
+-o /fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models/figures \
+    """
+    clade_names = ['AY.34.2', 'AZ.3', 'AY.108', 'A.2.5', 'AY.87', 'AY.74', 'B.1.1.10', 'P.1.7']
+    # clade_names = [f"{c}_" for c in clade_names]  # TODO: Change names so you don't have to do this for the real data
+
+    outfile = out_dir + "/pcm_probabilities.png"
+
+    print("will save plot to", outfile)
+    trials = range(25)
+    
+    results_full = {clade: [] for clade in clade_names}
+    for clade in clade_names:
+        for trial in trials:
+            fp = f"{base_dir}/{clade}/gamma_10_hmut_50/{trial}/results/diff_historydag_mut_rates/best_pcm_prob.txt"
+            try:
+                with open(fp, "r") as f:
+                    pcm_prob = float(f.read().strip())
+                    results_full[clade].append(pcm_prob)
+                    
+                    
+                    # TODO: Adjust minimum cleaned results requirements...
+                    # if len(cleaned_results) > 90:
+
+                    print(clade, "\t with", len(cleaned_results))
+                    results_full.extend(cleaned_results)
+            except Exception: # Allows KeyboardInterrupt to work still
+                continue
+        
+    results_full["All Trials"] = [it for ls in results_full.values() for it in ls]
+    fig, ax = plt.subplots()
+    # Extract clade names and probabilities from the dictionary
+    clades = list(results_full.keys())
+    probabilities = list(results_full.values())
+
+    # Create a box plot for each clade with the specified colors
+    boxplot = ax.boxplot(probabilities, labels=clades)
+
+    # Rotate x-axis labels vertically
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=90, ha='center')
+
+    # Add labels and title
+    ax.set_xlabel('Clade Names')
+    ax.set_ylabel('Probabilities')
+    ax.set_title('Box Plot of Probabilities for Each Clade')
+
+    # Save the plot to the specified file path
+    plt.savefig(outfile, dpi=300)
+
+
+
 
 @click.command("aggregate_results")
 @click.option('--base_dir', '-c', help='path to base directory where all clades reside.')
@@ -511,13 +573,14 @@ python support_pipeline/plotting.py aggregate_results \
                     with open(fp, "rb") as f:
                         results = pickle.load(f)
                         cleaned_results = [result for result in results if len(result[0]) > 1 and result[1] > support_removal_threshold]
+                        print(fp)
                         
                         # TODO: Adjust minimum cleaned results requirements...
                         # if len(cleaned_results) > 90:
 
                         print(clade, "\t with", len(cleaned_results))
                         results_full.extend(cleaned_results)
-                except:
+                except Exception: # Allows KeyboardInterrupt to work still
                     continue
         
         print(f"Building sliding window plot...")
@@ -1170,7 +1233,7 @@ def plot_diff_pars_distribution(data_path, input_name):
 
                 with open(sim_info_path, "r") as f:
                     tree_stats = json.load(f)
-                    toi_score = int(tree_stats['max_score_top'])
+                    toi_score = int(tree_stats['pars_score'])
 
             except Exception as e:
                 print(e)
@@ -1209,6 +1272,7 @@ def plot_diff_pars_distribution(data_path, input_name):
         plt.legend(title="%-mutation : mean")
         plt.title(f"MP-Diffused Parsimony Posterior for {clade_name}")
         plt.savefig(f"{fig_path}")
+        print(fig_path)
         plt.clf()
         plt.close()
 
@@ -2125,6 +2189,7 @@ def compare_mutation_probs(data_path, input_name):
         plt.yscale("log")
         plt.title(f"Comparsion of Different Mutation Probability Functions {clade_name} {sim_type}")
         plt.savefig(f"{fig_path}/mutation_probs_histogram_lin_scale.png")
+        print(fig_path)
         plt.clf()
         plt.close()
 
@@ -2367,6 +2432,7 @@ cli.add_command(plot_sub_stats)
 
 cli.add_command(plot_pars_distribution)
 cli.add_command(plot_pd_heatmaps)
+cli.add_command(plot_pcm_probabilities)
 cli.add_command(plot_sim_stats)   # NOTE: This should probably go in the hmut stuff...
 cli.add_command(sim_model_coverage)
 cli.add_command(plot_sim_model_stats)
@@ -2381,6 +2447,7 @@ cli.add_command(compare_trial_results)
 cli.add_command(compare_results)
 cli.add_command(clade_results)
 cli.add_command(compare_clade_results)
+cli.add_command(compare_multi_clade_results)
 cli.add_command(aggregate_results)
 
 

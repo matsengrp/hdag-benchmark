@@ -597,46 +597,50 @@ def nwk_sample_output(node_set, tree_file):
 @click.option('--fasta_path', '-f', help='fasta path for given DAG that maps sequences to taxon id')
 @click.option('--mut_rates_path', '-m', default=None, help='phastSim true mutation rates file')
 @click.option('--branch_len', '-b', default=0.001, help='default branch length')
-def diffused_hdag_samples(input_dag, out_file, num_samples, fasta_path, mut_rates_path, branch_len):
+@click.option('--pcm_prob', '-p', default=0.02, help='probability to be used for PCMs')
+def diffused_hdag_samples(input_dag, out_file, num_samples, fasta_path, mut_rates_path, branch_len, pcm_prob):
     dag = hdag.mutation_annotated_dag.load_MAD_protobuf_file(input_dag)
     dag.make_complete()
     dag.convert_to_collapsed()
 
-    if mut_rates_path is not None:
-        substitution_model = np.array(
-                [
-                    [-0.472, 0.039, 0.31, 0.123],
-                    [0.14, -3.19, 0.022, 3.028],
-                    [0.747, 0.113, -3.813, 2.953],
-                    [0.056, 0.261, 0.036, -0.353]
-                ]
-            )
-        site2rates = {}
-        with open(mut_rates_path, "r") as fh:
-            lines = fh.readlines()
-            for line in lines[1:]:
-                arr = line.strip().split("\t")
+    if False:
+        pass
+    # if mut_rates_path is not None:
+    #     substitution_model = np.array(
+    #             [
+    #                 [-0.472, 0.039, 0.31, 0.123],
+    #                 [0.14, -3.19, 0.022, 3.028],
+    #                 [0.747, 0.113, -3.813, 2.953],
+    #                 [0.056, 0.261, 0.036, -0.353]
+    #             ]
+    #         )
+    #     site2rates = {}
+    #     with open(mut_rates_path, "r") as fh:
+    #         lines = fh.readlines()
+    #         for line in lines[1:]:
+    #             arr = line.strip().split("\t")
 
-                # Adjust based on gamma rate variation
-                site = int(arr[0])
-                rate = float(arr[1])
-                rate_mat = np.ones((4, 4)) * rate
+    #             # Adjust based on gamma rate variation
+    #             site = int(arr[0])
+    #             rate = float(arr[1])
+    #             rate_mat = np.ones((4, 4)) * rate
 
-                # Adjust based on hypermutation
-                if arr[2] == "1":
-                    i = _pb_nuc_codes[arr[3]]
-                    j = _pb_nuc_codes[arr[4]]
-                    rate_mat[i, j] *= 50
+    #             # Adjust based on hypermutation
+    #             if arr[2] == "1":
+    #                 i = _pb_nuc_codes[arr[3]]
+    #                 j = _pb_nuc_codes[arr[4]]
+    #                 rate_mat[i, j] *= 50
 
-                Q = np.multiply(substitution_model, rate_mat)
-                for i in range(4):
-                    Q[i, i] -= np.sum(Q[i])
+    #             Q = np.multiply(substitution_model, rate_mat)
+    #             for i in range(4):
+    #                 Q[i, i] -= np.sum(Q[i])
                 
-                site2rates[site] = Q
+    #             site2rates[site] = Q
 
-        sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), lambda n: prob_muts(n, site2rates, branch_len=branch_len))
+    #     sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), lambda n: prob_muts(n, site2rates, branch_len=branch_len))
     else:
-        sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), lambda ete_node: 0.02) 
+        print("sampling with pcm probability ", pcm_prob)
+        sampler = dag.diffused_tree_sampler(num_samples, load_fasta(fasta_path), lambda ete_node: pcm_prob) 
 
     with open(out_file, "w") as fh:
         for _ in range(num_samples):

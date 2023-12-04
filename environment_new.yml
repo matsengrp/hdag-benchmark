@@ -1,4 +1,4 @@
-name: hdag-benchmark
+name: hdag-benchmark3
 channels:
   - bioconda
   - conda-forge
@@ -275,4 +275,3 @@ dependencies:
       - soupsieve==2.3.2.post1
       - tomli==2.0.1
       - zipp==3.12.1
-prefix: /home/whowards/anaconda3/envs/hdag-benchmark

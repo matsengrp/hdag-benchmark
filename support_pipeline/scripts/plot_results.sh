@@ -19,7 +19,7 @@ echo "=> Plotting results..."
 
 
 eval "$(conda shell.bash hook)"
-conda activate hdag-benchmark
+conda activate /home/wdumm/miniconda3/envs/hdag-benchmark3
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 for clade in $(cat /fh/fast/matsen_e/whowards/hdag-benchmark/support_pipeline/scripts/diffused_sampling_experiment/clades.txt); do

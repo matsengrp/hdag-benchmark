@@ -11,13 +11,14 @@ echo "=> Starting inference for "$method"..."
 
 set -eu
 eval "$(conda shell.bash hook)"
-conda activate hdag-benchmark
+conda activate /home/wdumm/miniconda3/envs/hdag-benchmark3
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 currdir=$PWD
-datadir=data/sim_models
-cd $datadir
 script_dir=$currdir"/support_pipeline/scripts/mb_simulation_experiment"
+
+datadir=/fh/fast/matsen_e/whowards/hdag-benchmark/data/sim_models/
+cd $datadir
 for clade in $(cat $script_dir/clades.txt); do
 
     # if value of $var starts with #, ignore it
@@ -40,6 +41,7 @@ for clade in $(cat $script_dir/clades.txt); do
             mkdir -p $resultsdir
 
             logfile=$resultsdir/inference_${method}.log
+            echo $(realpath $logfile)
 
             sbatch -c $num_cores -t 10-0 -J "${arr[0]}|$clade|inference" -o $logfile -e $logfile.err \
             $currdir/support_pipeline/scripts/mb_simulation_experiment/infer_trial_${method}.sh $currdir $clade $trial "${arr[0]}"
