@@ -235,9 +235,10 @@ def main():
         to_idx = _pb_nuc_codes[to_nuc]
         mut_rate = rate_matrix[from_idx, to_idx]
 
-        counts_rate_list.append((num_pcm, count, mut_rate))
+        counts_rate_list.append((num_pcm, count, mut_rate, from_nuc, to_nuc, site))
     
     with open(outdir + "/counts_rate_list.pkl", "wb") as f:
+        print("writing data to", f.name)
         pickle.dump(counts_rate_list, f)
 
     

@@ -30,6 +30,7 @@ for clade in $(cat $script_dir/clades.txt); do
         # NOTE: out_dir should already exist. If not, it's probably incorrectly formatted
         # mkdir -p $out_dir
         logfile=$out_dir/${script_name}.log
+        echo $logfile
 
         sbatch -c $num_cores -J "$trial|$clade" -o $logfile -e $logfile.err \
         $script_dir/cluster_script.sh $script_name $clade $trial

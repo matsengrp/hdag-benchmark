@@ -2237,8 +2237,8 @@ def examine_pcm_prob(data_path):
                 continue
 
             # Gather prob pcm info
-            y = [num_pcm / count for num_pcm, count, mut_rate in scatter_list]
-            x = [mut_rate for num_pcm, count, mut_rate in scatter_list]
+            y = [num_pcm / count for num_pcm, count, mut_rate, from_nuc, to_nuc, site in scatter_list]
+            x = [mut_rate for num_pcm, count, mut_rate, from_nuc, to_nuc, site in scatter_list]
             clade_x.extend(x)
             clade_y.extend(y)
             clade_data.extend(scatter_list)
@@ -2272,7 +2272,7 @@ def examine_pcm_prob(data_path):
         mr_bins.append(0)
         mr_bins.reverse()
         binned_data = {i: [] for i in range(num_bins)}
-        for num_pcm, count, mut_rate in clade_data:
+        for num_pcm, count, mut_rate, from_nuc, to_nuc, site in clade_data:
             filter_arr = [i for i, mr_bin in enumerate(mr_bins) if mr_bin < mut_rate]
             bin_number = filter_arr[-1]
             binned_data[bin_number].append((num_pcm, count))
@@ -2304,7 +2304,9 @@ def examine_pcm_prob(data_path):
         plt.xlabel('# times in a PCM')
         plt.ylabel('Count observed')
         plt.legend()
-        plt.savefig(f"{clade_fig_path}/{file_name}_mut_rate_color_stratified_scatter.png")
+        fig_path = f"{clade_fig_path}/{file_name}_mut_rate_color_stratified_scatter.png"
+        print(fig_path)
+        plt.savefig(fig_path)
         plt.clf()
         plt.close()
 
