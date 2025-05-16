@@ -17,7 +17,7 @@ You can access it by cloning the repository and running `pip install -e .` once 
 We also use the C++ implementation of the history sDAG, Larch, from [this repo](https://github.com/matsengrp/larch).
 You can access it by cloning the repository and running the build instructions.
 
-Many of the scripts described below use assume access to a cluster and attempt to access it via the slurm commands.
+Many of the scripts described below assume access to a cluster and attempt to access it via the slurm commands.
 
 ## Main Results Replication: _Densely sampled phylogenies frequently deviate from maximum parsimony in simple and local ways_
 
