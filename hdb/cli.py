@@ -4,7 +4,7 @@ import sys
 import click
 import hdb.summary as summary
 import hdb.collapse_tree as ct
-import hdb.aggregate_dnapars_trees as agg
+# import hdb.aggregate_dnapars_trees as agg
 import ete3
 import pickle
 import random
@@ -38,16 +38,16 @@ def cli():
     pass  # pylint: disable=unnecessary-pass
 
 
-@cli.command()
-@click.argument("outfiles", nargs=-1)
-@click.option("-r", "--root", help="name for outgroup sequence")
-@click.option("-a", "--abundance_file", help="filepath to abundance mapping")
-@click.option("-o", "--output_path", help="filepath to write pickled hDAG")
-def aggregate_dnapars_trees(outfiles, root, abundance_file, output_path):
-    """Process dnapars outfiles into a history DAG."""
-    dag = agg.aggregate_dnapars_trees(outfiles, root, abundance_file)
-    with open(output_path, 'wb') as fh:
-        pickle.dump(dag, file=fh)
+# @cli.command()
+# @click.argument("outfiles", nargs=-1)
+# @click.option("-r", "--root", help="name for outgroup sequence")
+# @click.option("-a", "--abundance_file", help="filepath to abundance mapping")
+# @click.option("-o", "--output_path", help="filepath to write pickled hDAG")
+# def aggregate_dnapars_trees(outfiles, root, abundance_file, output_path):
+#     """Process dnapars outfiles into a history DAG."""
+#     dag = agg.aggregate_dnapars_trees(outfiles, root, abundance_file)
+#     with open(output_path, 'wb') as fh:
+#         pickle.dump(dag, file=fh)
 
 @cli.command()
 @click.argument("input_path")
@@ -71,18 +71,18 @@ def numerify_taxon_names(input_path, out_path_base):
         for seq_id, tax_id in mapping.items():
             print(f"{seq_id} {tax_id}", file=f)
 
-@cli.command()
-@click.argument("indags", nargs=-1)
-@click.option("-o", "--output_path", help="filepath to write pickled hDAG")
-def merge_dags(indags, output_path):
-    def load_dag(indag):
-        with open(indag, 'rb') as fh:
-            dag = pickle.load(fh)
-        return dag
+# @cli.command()
+# @click.argument("indags", nargs=-1)
+# @click.option("-o", "--output_path", help="filepath to write pickled hDAG")
+# def merge_dags(indags, output_path):
+#     def load_dag(indag):
+#         with open(indag, 'rb') as fh:
+#             dag = pickle.load(fh)
+#         return dag
     
-    dag = agg.merge_dags(load_dag(indag) for indag in indags)
-    with open(output_path, 'wb') as fh:
-        pickle.dump(dag, file=fh)
+#     dag = agg.merge_dags(load_dag(indag) for indag in indags)
+#     with open(output_path, 'wb') as fh:
+#         pickle.dump(dag, file=fh)
 
 @cli.command()
 @click.argument("fasta_paths", nargs=-1)
@@ -232,43 +232,43 @@ def get_tree_stats(sim_dir):
 
     print(f"MP with topology: {max_score}\t MP on data: {best_possible}")
 
-    # Add similar stats from the USHER tree
-    clade_dir = sim_dir.split("/")[0]
-    usher_tree_path = clade_dir + "/tree.n.nwk"
-    usher_tree = ete.Tree(usher_tree_path, format=1)
+    # # Add similar stats from the USHER tree
+    # clade_dir = sim_dir.split("/")[0]
+    # usher_tree_path = clade_dir + "/tree.n.nwk"
+    # usher_tree = ete.Tree(usher_tree_path, format=1)
 
-    # TODO: This is incorrect
-    # # Remove multifurcations
-    # to_delete = []
+    # # TODO: This is incorrect
+    # # # Remove multifurcations
+    # # to_delete = []
+    # # for node in usher_tree.traverse():
+    # #     # TODO: Add leaf check elsewhere as needed
+    # #     if not node.is_root() and node.dist==0:
+    # #         to_delete.append(node)
+    # # for node in to_delete:
+    # #     node.delete(prevent_nondicotomic=False)
+    # # # Remove unifurcations
+    # # to_delete = [node for node in usher_tree.traverse() if len(node.children) == 1 and not node.is_root()]
+    # # for node in to_delete:
+    # #     node.delete(prevent_nondicotomic=False)
+
+    # pars = 0
+    # multifurc_counts = Counter()
+    # node_count = 0
+    # leaf_count = 0
     # for node in usher_tree.traverse():
-    #     # TODO: Add leaf check elsewhere as needed
-    #     if not node.is_root() and node.dist==0:
-    #         to_delete.append(node)
-    # for node in to_delete:
-    #     node.delete(prevent_nondicotomic=False)
-    # # Remove unifurcations
-    # to_delete = [node for node in usher_tree.traverse() if len(node.children) == 1 and not node.is_root()]
-    # for node in to_delete:
-    #     node.delete(prevent_nondicotomic=False)
-
-    pars = 0
-    multifurc_counts = Counter()
-    node_count = 0
-    leaf_count = 0
-    for node in usher_tree.traverse():
-        node_count += 1
-        if node.is_leaf():
-            leaf_count += 1
-        if not node.is_root():
-            pars += node.dist
-        if not node.is_leaf():
-            multifurc_counts[len(node.children)] += 1
+    #     node_count += 1
+    #     if node.is_leaf():
+    #         leaf_count += 1
+    #     if not node.is_root():
+    #         pars += node.dist
+    #     if not node.is_leaf():
+    #         multifurc_counts[len(node.children)] += 1
     
-    # NOTE: That this includes duplicate leaves
-    stats_dict["usher_num_leaves"] = leaf_count
-    stats_dict["usher_num_nodes"] = node_count
-    stats_dict["usher_pars_score"] = pars
-    stats_dict["usher_multifurc_distribution"] = multifurc_counts
+    # # NOTE: That this includes duplicate leaves
+    # stats_dict["usher_num_leaves"] = leaf_count
+    # stats_dict["usher_num_nodes"] = node_count
+    # stats_dict["usher_pars_score"] = pars
+    # stats_dict["usher_multifurc_distribution"] = multifurc_counts
 
 
 
@@ -297,6 +297,24 @@ def resolve_multifurcations(input_path, output_path, resolve_seed, branch_len_mo
         new_tree.add_child(name='ancestral', dist=0)
         new_tree.add_child(child=tree, dist=0)
         tree = new_tree
+    tree.write(outfile=output_path, format=1)
+
+
+@cli.command()
+@click.option("-i", "--input-path", help="Newick tree input path.")
+@click.option("-o", "--output-path", help="Output path.")
+@click.option("-s", "--branch-multiplier", default=1.0)
+def scale_branch_lens(input_path, output_path, branch_multiplier):
+    """
+    Scales the given tree by the given branch multiplier.
+    """
+    tree = ete3.Tree(input_path, format=1)
+    for node in tree.traverse():
+        if not node.is_root():
+            # print(node.dist)
+            # print(type(branch_multiplier))
+            # print(type(node.dist))
+            node.dist=node.dist*branch_multiplier
     tree.write(outfile=output_path, format=1)
 
 
@@ -333,7 +351,7 @@ def resolve_polytomy(tree, seed, branch_len_model):
             while len(node_list) > 2:
                 # Randomly sample a pair of nodes
                 pair = random.sample(range(0, len(node_list)-1), 2)
-                pair.sort() # TODO: Why are we doing this?
+                pair.sort()
                 
                 # Create new node and make branch length
                 par = ete3.Tree()
@@ -344,6 +362,12 @@ def resolve_polytomy(tree, seed, branch_len_model):
                 elif branch_len_model == "num-muts":
                     adj_dist = resolved_multifurc_len
                     par.dist = adj_dist
+                elif branch_len_model.startswith("num-muts"):
+                    # Assume model is of the form "num-muts-X" where X is the multiplier
+                    multiplier = float(branch_len_model[len("num-muts-"):])
+                    adj_dist = resolved_multifurc_len * multiplier
+                    par.dist = adj_dist
+
 
                 # merge under a parent node
                 par.name = f"r{new_node_name}"
@@ -367,6 +391,10 @@ def resolve_polytomy(tree, seed, branch_len_model):
                 branch_len = jc_dist(n.dist)
             elif branch_len_model == "num-muts":
                 branch_len = n.dist
+            elif branch_len_model.startswith("num-muts-"):
+                # Assume string is of the form "num-muts-X" where X is the multiplier
+                multiplier = float(branch_len_model[len("num-muts-"):])
+                branch_len = n.dist * multiplier
 
             n.dist = branch_len
         

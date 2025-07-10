@@ -1,0 +1,22 @@
+#gamma_rv_10:--alpha 0.1
+#gamma_rv_20:--alpha 0.2
+#gamma_rv_30:--alpha 0.3
+#
+#gamma_30_hmut_150:--alpha 0.3 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#gamma_30_hmut_100:--alpha 0.3 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#gamma_30_hmut_50:--alpha 0.3 --hyperMutProbs 0.01 --hyperMutRates 50.0
+#gamma_20_hmut_150:--alpha 0.2 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#gamma_20_hmut_100:--alpha 0.2 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#gamma_20_hmut_50:--alpha 0.2 --hyperMutProbs 0.01 --hyperMutRates 50.0
+#gamma_10_hmut_150:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#gamma_10_hmut_100:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#gamma_10_hmut_200:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#gamma_20_hmut_200:--alpha 0.2 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#gamma_30_hmut_200:--alpha 0.3 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#gamma_5_hmut_50:--alpha 0.05 --hyperMutProbs 0.01 --hyperMutRates 50.0
+#gamma_5_hmut_100:--alpha 0.05 --hyperMutProbs 0.01 --hyperMutRates 100.0
+#gamma_5_hmut_150:--alpha 0.05 --hyperMutProbs 0.01 --hyperMutRates 150.0
+#gamma_5_hmut_200:--alpha 0.05 --hyperMutProbs 0.01 --hyperMutRates 200.0
+#
+# The simulation parameters above were used for tuning hypermutation and gamma RV
+gamma_10_hmut_50:--alpha 0.1 --hyperMutProbs 0.01 --hyperMutRates 50.0
